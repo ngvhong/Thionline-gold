@@ -1,0 +1,48 @@
+{
+  "name": "thionline",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@sparticuz/chromium": "^149.0.0",
+    "@vercel/blob": "^2.6.1",
+    "bcryptjs": "^3.0.3",
+    "canvas-confetti": "^1.9.4",
+    "docx": "^9.7.1",
+    "exceljs": "^4.4.0",
+    "html2pdf.js": "^0.14.0",
+    "jsonwebtoken": "^9.0.3",
+    "katex": "^0.17.0",
+    "mongoose": "^9.7.4",
+    "next": "16.2.10",
+    "nodemailer": "^9.0.3",
+    "puppeteer-core": "^25.3.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-latex-next": "^3.0.0",
+    "svgo": "^4.0.2",
+    "xlsx": "^0.18.5",
+    "cloudinary": "^2.5.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^20",
+    "@types/nodemailer": "^8.0.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "puppeteer": "^25.3.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

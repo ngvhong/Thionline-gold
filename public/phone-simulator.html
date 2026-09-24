@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<title>Mô phỏng điện thoại — xem localhost</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bezel-1: #2b2d33;
+    --bezel-2: #16171b;
+    --bezel-edge: #45474f;
+    --accent: #2563eb;
+    --bg: #dde3ec;
+    --panel-bg: #ffffff;
+    --panel-border: #e2e8f0;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    display: flex;
+    /* Bảng điều khiển dồn hẳn sang bên phải; vùng bên trái (stage) chiếm
+       toàn bộ phần còn lại để điện thoại được "full" không gian, không còn
+       bị ép vào giữa 1 cột hẹp như bản trước. */
+    flex-direction: row;
+    overflow: hidden;
+  }
+
+  /* ===== Vùng trái: nơi đặt khung điện thoại, luôn co giãn lấp đầy ===== */
+  .stage {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    overflow: hidden;
+  }
+
+  /* ===== Bảng điều khiển bên phải ===== */
+  .panel {
+    width: 300px;
+    flex-shrink: 0;
+    background: var(--panel-bg);
+    border-left: 1px solid var(--panel-border);
+    padding: 22px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+  }
+  .panel h1 {
+    font-size: 16px;
+    margin: 0;
+    color: #1e293b;
+  }
+  .panel p.sub {
+    margin: 0;
+    font-size: 12.5px;
+    color: #64748b;
+    line-height: 1.55;
+  }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 5px;
+  }
+  .field input[type="text"] {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 9px 10px;
+    font-size: 13px;
+    font-family: monospace;
+  }
+  .btn-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .panel button {
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    width: 100%;
+  }
+  .panel button.secondary {
+    background: #fff;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+  }
+  .panel button:hover { filter: brightness(1.05); }
+  .panel .hint {
+    margin-top: auto;
+    font-size: 11.5px;
+    color: #94a3b8;
+    line-height: 1.6;
+  }
+  .panel .hint code {
+    background: #f1f5f9;
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  .scale-readout {
+    font-size: 11.5px;
+    color: #94a3b8;
+    text-align: center;
+  }
+
+  /* ===== Khung điện thoại =====
+     Vẽ lại theo dáng máy trung tính, tránh chi tiết đặc trưng của 1 hãng cụ
+     thể (không dùng lỗ camera tròn đơn độc kiểu Samsung Note/S-Ultra như bản
+     trước) — dùng viền dày vừa phải bo góc lớn + cụm khuyết hình viên thuốc
+     ("pill") nằm trong phần viền phía trên, không đè lên nội dung trang web
+     bên trong. Kích thước cơ sở giữ nguyên (412 x 915 CSS px, ~19.5:9). */
+  #device-scale-wrap {
+    transform-origin: center center;
+  }
+  .device {
+    position: relative;
+    background: linear-gradient(165deg, var(--bezel-1), var(--bezel-2));
+    border-radius: 52px;
+    padding: 16px;
+    box-shadow:
+      0 25px 60px rgba(0,0,0,0.30),
+      inset 0 0 0 1.5px var(--bezel-edge),
+      inset 0 0 0 5px rgba(0,0,0,0.35);
+  }
+  .device.portrait  { width: 412px; height: 915px; }
+  .device.landscape { width: 915px; height: 412px; }
+
+  .device .pill {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 96px;
+    height: 24px;
+    background: var(--bezel-2);
+    border-radius: 14px;
+    z-index: 3;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+  }
+  .device .pill::after {
+    /* đốm nhỏ mô phỏng camera trước, nằm bên trong viên thuốc — chi tiết
+       phụ, không phải điểm nhấn chính như bản Samsung trước đó */
+    content: "";
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #383a42;
+  }
+  .device.landscape .pill {
+    top: 50%;
+    left: 16px;
+    transform: translateY(-50%) rotate(-90deg);
+  }
+
+  .screen {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #fff;
+    border-radius: 36px;
+    overflow: hidden;
+  }
+  .screen iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    background: #fff;
+  }
+
+  .side-btn {
+    position: absolute;
+    background: linear-gradient(90deg, var(--bezel-edge), var(--bezel-1));
+    border-radius: 3px;
+  }
+  .device.portrait .side-btn.power  { right: -3px; top: 190px; width: 3px; height: 76px; }
+  .device.portrait .side-btn.volume-up   { left: -3px; top: 150px; width: 3px; height: 46px; }
+  .device.portrait .side-btn.volume-down { left: -3px; top: 206px; width: 3px; height: 46px; }
+  .device.portrait .side-btn.mute { left: -3px; top: 118px; width: 3px; height: 22px; }
+
+  .device.landscape .side-btn.power  { bottom: -3px; left: 190px; width: 76px; height: 3px; }
+  .device.landscape .side-btn.volume-up   { top: -3px; left: 150px; width: 46px; height: 3px; }
+  .device.landscape .side-btn.volume-down { top: -3px; left: 206px; width: 46px; height: 3px; }
+  .device.landscape .side-btn.mute { top: -3px; left: 118px; width: 22px; height: 3px; }
+</style>
+</head>
+<body>
+
+  <div class="stage" id="stage">
+    <div id="device-scale-wrap">
+      <div class="device portrait" id="device">
+        <div class="pill"></div>
+        <div class="side-btn power"></div>
+        <div class="side-btn volume-up"></div>
+        <div class="side-btn volume-down"></div>
+        <div class="side-btn mute"></div>
+        <div class="screen">
+          <iframe id="frame" src="about:blank"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="panel">
+    <h1>📱 Mô phỏng màn hình điện thoại</h1>
+    <p class="sub">
+      Xem giao diện app chạy ở <code>localhost</code> như trên điện thoại thật —
+      không cần cắm máy. Khung điện thoại tự co giãn lấp đầy hết chỗ còn lại
+      của cửa sổ, không cần chọn tỉ lệ tay.
+    </p>
+
+    <div class="field">
+      <label>Địa chỉ (URL)</label>
+      <input id="urlInput" type="text" value="" spellcheck="false" />
+    </div>
+
+    <div class="btn-row">
+      <button onclick="loadUrl()">Tải</button>
+      <button class="secondary" onclick="reloadFrame()">🔄 Làm mới</button>
+      <button class="secondary" onclick="toggleOrientation()">🔃 Xoay ngang/dọc</button>
+    </div>
+
+    <p class="scale-readout" id="scaleReadout"></p>
+
+    <p class="hint">
+      Địa chỉ ở trên tự điền đúng theo nơi trang này đang chạy — máy cá nhân
+      thì tự vào <code>http://localhost:3000</code>, còn khi đã deploy lên
+      Vercel thì tự vào thẳng <code>https://thionline-opal.vercel.app</code>,
+      không cần sửa tay. Muốn xem đúng 1 trang cụ thể, dán thẳng URL đầy đủ
+      vào ô trên, ví dụ <code>.../thi/&lt;examId&gt;</code>, rồi bấm "Tải".
+    </p>
+  </aside>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const scaleWrap = document.getElementById('device-scale-wrap');
+    const device = document.getElementById('device');
+    const frame = document.getElementById('frame');
+    const urlInput = document.getElementById('urlInput');
+    const scaleReadout = document.getElementById('scaleReadout');
+
+    // Kích thước "thật" (chưa scale) của khung điện thoại, tính luôn cả viền
+    // (padding 16px mỗi bên) — dùng để tính tỉ lệ co giãn vừa khít vùng stage.
+    const BASE = {
+      portrait:  { w: 412 + 32, h: 915 + 32 },
+      landscape: { w: 915 + 32, h: 412 + 32 },
+    };
+
+    function currentOrientation() {
+      return device.classList.contains('landscape') ? 'landscape' : 'portrait';
+    }
+
+    // THÊM MỚI (thay cho ô chọn tỉ lệ % thủ công đã bỏ): tự tính tỉ lệ co
+    // giãn lớn nhất có thể để khung điện thoại luôn lấp đầy hết vùng bên
+    // trái (100% không gian được cấp, không tự ý giữ nhỏ lại) — luôn tính
+    // lại mỗi khi resize cửa sổ hoặc xoay ngang/dọc.
+    function fitScale() {
+      const { w: baseW, h: baseH } = BASE[currentOrientation()];
+      const availW = stage.clientWidth;
+      const availH = stage.clientHeight;
+      const scale = Math.min(availW / baseW, availH / baseH);
+      scaleWrap.style.transform = `scale(${scale})`;
+      scaleReadout.textContent = `Đang hiển thị ở tỉ lệ ${Math.round(scale * 100)}%`;
+    }
+
+    function loadUrl() {
+      const url = urlInput.value.trim();
+      if (url) frame.src = url;
+    }
+    urlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loadUrl();
+    });
+
+    // THÊM MỚI: trang mô phỏng này được đặt trong thư mục public/ của chính
+    // app Next.js, nên nó LUÔN được phục vụ cùng gốc (origin) với app thật —
+    // http://localhost:3000/phone-simulator.html lúc chạy dev ở máy, hoặc
+    // https://thionline-opal.vercel.app/phone-simulator.html sau khi deploy
+    // lên Vercel. Vì vậy chỉ cần lấy đúng window.location.origin của CHÍNH
+    // trang này làm địa chỉ mặc định — không cần gõ tay/sửa code mỗi lần
+    // deploy nữa, tự động đúng ở cả 2 môi trường. Chỉ khi mở trực tiếp file
+    // này kiểu file:// (không qua server nào) mới lùi về localhost:3000 làm
+    // giá trị dự phòng.
+    function defaultTargetUrl() {
+      try {
+        const origin = window.location.origin;
+        if (origin && origin !== 'null' && !origin.startsWith('file:')) {
+          return origin + '/';
+        }
+      } catch (e) {
+        // bỏ qua, dùng giá trị dự phòng bên dưới
+      }
+      return 'http://localhost:3000';
+    }
+
+    urlInput.value = defaultTargetUrl();
+    loadUrl();
+
+    function reloadFrame() {
+      frame.src = frame.src;
+    }
+
+    function toggleOrientation() {
+      device.classList.toggle('portrait');
+      device.classList.toggle('landscape');
+      fitScale();
+    }
+
+    window.addEventListener('resize', fitScale);
+    fitScale();
+  </script>
+
+</body>
+</html>
