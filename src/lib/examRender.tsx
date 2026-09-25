@@ -701,8 +701,20 @@ export function LatexStatTable({ block }: { block: string }) {
   // sát viền như bản cũ px-5 từng bị phản ánh "chật chội" — xem ghi chú ở
   // ExamBuilder.tsx). paddingTop/paddingBottom giữ nguyên 10px (không liên
   // quan tới khiếu nại này). ĐỒNG BỘ với src/app/ExamBuilder.tsx.
+  // SỬA (khiếu nại: "viền ngang trên cùng của bảng bị mất/cắt cụt"): nguyên
+  // nhân là khung ngoài FitWidthBlock dùng overflow-x-auto — theo đặc tả
+  // CSS, hễ 1 trục overflow-x/overflow-y được đặt khác 'visible' thì trục
+  // còn lại KHÔNG được phép giữ 'visible' nữa, trình duyệt tự ép nó thành
+  // 'auto' luôn (dù ta chỉ khai overflow-x). Kết quả: trục dọc cũng trở
+  // thành vùng cuộn/clip, và viền 1.5px vẽ ngay sát mép trên cùng (y=0) của
+  // vùng đó dễ bị cắt/mờ do làm tròn subpixel khi trình duyệt tính lại vùng
+  // clip (càng rõ khi <div> con bên trong có transform, xem inner div của
+  // FitWidthBlock). Thêm pt-0.5 (2px) đệm phía trên để viền được vẽ CÁCH mép
+  // clip 1 khoảng, không còn nằm đúng ranh giới bị cắt nữa — chỉ thêm ở đây
+  // (LatexStatTable), không sửa FitWidthBlock dùng chung, để không ảnh hưởng
+  // khoảng cách của các khối khác (TikZ, hình...) đang dùng chung component.
   return (
-    <FitWidthBlock className="mt-0 mb-2">
+    <FitWidthBlock className="mt-0 mb-2 pt-0.5">
       <table className="border-collapse text-[13px]">
         <tbody>
           {rows.map((row, ri) => {

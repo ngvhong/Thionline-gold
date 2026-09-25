@@ -907,7 +907,11 @@ function LatexStatTable({ block }: { block: string }) {
   // đồng bộ với src/lib/examRender.tsx: my-0 -> mt-0 mb-3 (12px) bị phản ánh
   // rộng quá -> giảm còn mt-0 mb-1 (4px), vừa đủ để không đè lên chữ nữa.
   return (
-    <FitWidthBlock className="mt-0 mb-1">
+    // SỬA (khiếu nại: "viền ngang trên cùng của bảng bị mất/cắt cụt") —
+    // ĐỒNG BỘ với src/lib/examRender.tsx LatexStatTable, xem giải thích đầy
+    // đủ ở đó (overflow-x-auto ép overflow-y thành 'auto', viền vẽ sát mép
+    // clip bị cắt/mờ do subpixel). pt-0.5 đệm ra khỏi mép clip.
+    <FitWidthBlock className="mt-0 mb-1 pt-0.5">
       <table className="border-collapse text-[13px]">
         <tbody>
           {rows.map((row, ri) => {

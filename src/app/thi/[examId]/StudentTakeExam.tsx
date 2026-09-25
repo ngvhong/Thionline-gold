@@ -1145,6 +1145,20 @@ export default function StudentTakeExam({
                   </div>
                 )}
 
+                {/* SỬA (khiếu nại: "chụp ảnh bấm OK xong bị bung khỏi bài làm"):
+                    nguyên nhân là input file với capture="environment" ép mở
+                    THẲNG app Camera gốc — trên điện thoại RAM thấp, hệ điều
+                    hành hay tự tắt (kill) tiến trình trình duyệt đang chạy nền
+                    để nhường RAM cho app Camera, khiến lúc quay lại Chrome phải
+                    tải lại trang từ đầu, mất trạng thái bài làm.
+                    BỎ HẲN nút chụp trực tiếp (capture="environment") theo yêu
+                    cầu — đa phần học sinh dùng máy yếu, rủi ro bị bung khỏi
+                    bài thi oan cao hơn lợi ích tiện chụp nhanh. Chỉ còn 1 input
+                    KHÔNG có capture: mở bảng chọn ảnh bình thường của điện
+                    thoại (trên Android/iOS đời mới, bảng này vẫn có sẵn lựa
+                    chọn "Chụp ảnh mới" ngay bên trong, nhẹ hơn hẳn so với ép mở
+                    thẳng app Camera riêng, ít bị hệ điều hành kill tiến trình
+                    hơn), hoặc chọn ảnh đã có sẵn trong Thư viện ảnh. */}
                 <label
                   htmlFor={inputId}
                   onClick={suppressLeaveWarningForImagePicker}
@@ -1160,7 +1174,6 @@ export default function StudentTakeExam({
                   id={inputId}
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   className="hidden"
                   disabled={uploading}
                   onChange={(e) => {

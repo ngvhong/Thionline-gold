@@ -55,13 +55,24 @@ export async function put(
     throw new Error('⚠️ Thiếu cấu hình CLOUDINARY (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET) trong biến môi trường.');
   }
 
-  let finalPathname = pathname;
+  // THÊM MỚI: gom toàn bộ file của app vào 1 thư mục gốc cố định trên
+  // Cloudinary (thionline-opal/...) thay vì rải ở thư mục gốc tài khoản.
+  // Lý do: tài khoản Cloudinary có thể dùng chung cho nhiều dự án khác
+  // sau này — có thư mục cha riêng giúp dễ quản lý/tìm kiếm/dọn dẹp, và
+  // tránh trùng tên với file của dự án khác. Không đổi cấu trúc thư mục
+  // con bên trong (vẫn theo loại ảnh rồi theo đề/bản nháp như cũ), chỉ
+  // thêm 1 lớp thư mục cha ở ngoài cùng.
+  const ROOT_FOLDER = 'thionline-opal';
+  let finalPathname = pathname.startsWith(`${ROOT_FOLDER}/`)
+    ? pathname
+    : `${ROOT_FOLDER}/${pathname}`;
   if (options?.addRandomSuffix) {
-    const dot = pathname.lastIndexOf('.');
+    const base = finalPathname;
+    const dot = base.lastIndexOf('.');
     const suffix = Math.random().toString(36).slice(2, 10);
     finalPathname = dot > -1
-      ? `${pathname.slice(0, dot)}-${suffix}${pathname.slice(dot)}`
-      : `${pathname}-${suffix}`;
+      ? `${base.slice(0, dot)}-${suffix}${base.slice(dot)}`
+      : `${base}-${suffix}`;
   }
 
   // Chuyển đổi dữ liệu đầu vào thành Buffer
