@@ -14,6 +14,7 @@ import { checkRateLimit, getClientIp, formatRetryAfter } from '@/lib/rateLimit';
 import { getFreeTrialDays, getRegistrationMode } from '@/lib/appSettings';
 import { sendVerificationEmail } from '@/lib/sendEmail';
 import { REGISTRATION_CLOSED_MESSAGE, REGISTRATION_APPROVAL_MESSAGE } from '@/lib/adminConfig';
+import { getAppUrl } from '@/lib/appUrl';
 
 // THÊM MỚI (đóng/duyệt đăng ký): route công khai, KHÔNG cần đăng nhập — cho
 // trang login/page.tsx biết trước chế độ đăng ký hiện tại (mở/đóng/cần
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
     // mail (cùng nguyên tắc với sendAdminLoginAlertEmail ở route login), và
     // KHÔNG chặn đăng nhập/dùng app dù email chưa xác nhận (xem ghi chú ở
     // teacherModel.ts) — chỉ nhắc xác nhận, không khoá tính năng.
-    const verifyUrl = `${request.nextUrl.origin}/verify-email?token=${verifyToken}`;
+    const verifyUrl = `${getAppUrl(request.nextUrl.origin)}/verify-email?token=${verifyToken}`;
     sendVerificationEmail(teacher.email, verifyUrl).catch((err) =>
       console.error('Lỗi gửi email xác nhận:', err)
     );

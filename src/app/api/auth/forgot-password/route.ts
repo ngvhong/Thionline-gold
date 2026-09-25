@@ -4,6 +4,7 @@ import { TeacherModel } from '@/lib/teacherModel';
 import { generateResetToken, hashResetToken, RESET_TOKEN_TTL_MINUTES } from '@/lib/auth';
 import { sendPasswordResetEmail } from '@/lib/sendEmail';
 import { checkRateLimit, getClientIp, formatRetryAfter } from '@/lib/rateLimit';
+import { getAppUrl } from '@/lib/appUrl';
 
 // THÊM MỚI (rate limit): trước đây route này KHÔNG có giới hạn — ai đó gọi
 // liên tục có thể (1) làm phiền 1 email cụ thể bằng hàng loạt mail đặt lại
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
     teacher.resetTokenExpires = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000);
     await teacher.save();
 
-    const resetUrl = `${request.nextUrl.origin}/reset-password?token=${token}`;
+    const resetUrl = `${getAppUrl(request.nextUrl.origin)}/reset-password?token=${token}`;
     // Cố tình KHÔNG await lỗi gửi mail làm hỏng response — sendPasswordResetEmail
     // tự nuốt lỗi bên trong (xem lib/sendEmail.ts), người dùng luôn thấy
     // thông báo chung chung như nhau dù mail gửi thành công hay thất bại.

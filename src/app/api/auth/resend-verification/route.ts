@@ -4,6 +4,7 @@ import { TeacherModel } from '@/lib/teacherModel';
 import { getTeacherIdFromRequest, generateVerifyToken, hashVerifyToken, VERIFY_TOKEN_TTL_HOURS } from '@/lib/auth';
 import { checkRateLimit, formatRetryAfter } from '@/lib/rateLimit';
 import { sendVerificationEmail } from '@/lib/sendEmail';
+import { getAppUrl } from '@/lib/appUrl';
 
 // POST /api/auth/resend-verification — không cần body, lấy GV từ session
 // hiện tại (phải đăng nhập mới gọi được, vì đăng ký đã tự đăng nhập luôn —
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
     teacher.verifyTokenExpires = new Date(Date.now() + VERIFY_TOKEN_TTL_HOURS * 60 * 60 * 1000);
     await teacher.save();
 
-    const verifyUrl = `${request.nextUrl.origin}/verify-email?token=${verifyToken}`;
+    const verifyUrl = `${getAppUrl(request.nextUrl.origin)}/verify-email?token=${verifyToken}`;
     await sendVerificationEmail(teacher.email, verifyUrl);
 
     return NextResponse.json({ message: 'Đã gửi lại email xác nhận.' }, { status: 200 });
