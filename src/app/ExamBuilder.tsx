@@ -13,6 +13,9 @@ import { sanitizeMathMacros, stripLeadingTableEnv, collapseBlankAroundImagePlace
 import { FitWidthBlock, renderTextWithItalicBoldFix } from '@/lib/examRender';
 import { TIKZ_DISPLAY_BASE_SCALE } from '@/lib/tikzScaleConstants';
 import { scrollFadeX } from '@/lib/scrollFade';
+// THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): popup "Chia sẻ vào
+// kho chung", xem chi tiết trong component.
+import ShareToLibraryModal from '@/components/ShareToLibraryModal';
 
 // Icon nét vẽ đơn giản (kiểu outline, 1 màu, kế thừa currentColor) — dùng
 // thay cho emoji ở Bảng Điều Khiển Phòng Thi để đồng bộ hình thức, tránh mỗi
@@ -3101,6 +3104,7 @@ const DEFAULT_EXAM_SETTINGS = {
 
 export default function ExamBuilder({
   onGoToClasses,
+  initialExamIdToLoad,
 }: {
   // THÊM MỚI: callback do trang cha (page.tsx) truyền xuống để chuyển sang
   // tab "Quản lý lớp" ngay trong 1 cú bấm — dùng ở nút trong modal "Đã xuất
@@ -3108,6 +3112,13 @@ export default function ExamBuilder({
   // vẫn dùng được độc lập (ví dụ nếu sau này có trang test riêng) nếu không
   // ai truyền prop này xuống.
   onGoToClasses?: () => void;
+  // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): _id 1 đề để TỰ
+  // ĐỘNG mở ngay lúc mount (dùng khi GV vừa "Lấy đề về" từ /kho-de-chung,
+  // điều hướng sang đây qua query `?tab=exams&openExam=<id>` — xem page.tsx
+  // và src/app/kho-de-chung/KhoDeChungClient.tsx). Optional, undefined ở
+  // mọi nơi gọi ExamBuilder khác — không ảnh hưởng hành vi mặc định (mở tab
+  // trống/khôi phục nháp như cũ) khi không truyền prop này.
+  initialExamIdToLoad?: string | null;
 } = {}) {
   const [data, setData] = useState<any>(null);
 
@@ -3312,6 +3323,10 @@ export default function ExamBuilder({
   const [publishErrors, setPublishErrors] = useState<string[]>([]);
   const [showPublishSuccessModal, setShowPublishSuccessModal] = useState(false);
   const [publishedLink, setPublishedLink] = useState('');
+  // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): hiện/ẩn popup
+  // "Chia sẻ vào kho chung" — chỉ cần 1 boolean vì popup tự gọi API lấy
+  // trạng thái chia sẻ hiện tại của currentExamId, không cần state nào khác.
+  const [showShareToLibraryModal, setShowShareToLibraryModal] = useState(false);
   // THÊM MỚI (khiếu nại: "app có API xuất Word nhưng Cài đặt chỉ có xuất
   // PDF"): backend đã có sẵn GET /api/exams/[id]/export-docx (dùng
   // pandoc-wasm dựng file .docx THẬT, công thức Toán sửa được, không phải
@@ -4422,8 +4437,15 @@ export default function ExamBuilder({
       const result = await res.json();
       if (!res.ok) throw new Error(result?.error || 'Không tải được đề thi');
       loadExamData(result.exam.raw_data);
-      setExamTitle(title);
-      setTexFileName(title);
+      // SỬA (giai đoạn 3 — Kho đề chung giữa giáo viên, luồng "lấy đề về"
+      // rồi tự mở thẳng vào đây): trước đây LUÔN dùng đúng `title` truyền
+      // vào — hợp lý vì mọi nơi gọi hàm này (panel "Danh sách đề đã lưu")
+      // đều đã biết sẵn tiêu đề thật của đề. Thêm fallback `|| result.exam.title`
+      // CHỈ áp dụng khi gọi với title rỗng (trường hợp mới: tự mở đề vừa
+      // clone mà chưa có sẵn tiêu đề ở phía gọi) — không đổi hành vi của 2
+      // lượt gọi cũ (title || ... không ảnh hưởng gì khi title đã có giá trị).
+      setExamTitle(title || result.exam.title || '');
+      setTexFileName(title || result.exam.title || '');
       // THÊM MỚI (mục 2): ghi nhớ đang sửa đúng đề nào -> lần Lưu/Xuất bản
       // tiếp theo sẽ PATCH cập nhật lại bản ghi này (giữ nguyên link cũ),
       // KHÔNG tạo bản ghi mới.
@@ -4484,6 +4506,23 @@ export default function ExamBuilder({
       setLoadingExamId(null);
     }
   };
+
+  // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): tự mở đúng đề
+  // vừa "Lấy về" khi trang cha (page.tsx) đọc xong query param và set prop
+  // này lên (xảy ra SAU khi ExamBuilder đã mount, vì trang cha đọc
+  // window.location trong 1 useEffect của chính nó) — nên effect này phải
+  // phụ thuộc initialExamIdToLoad (không phải mảng rỗng) để chạy lại đúng
+  // lúc giá trị đổi từ null -> có id thật. autoLoadedRef chặn chạy lại lần
+  // 2 nếu component re-render vì lý do khác trong lúc prop này vẫn giữ
+  // nguyên giá trị cũ.
+  const autoLoadedExamIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (initialExamIdToLoad && autoLoadedExamIdRef.current !== initialExamIdToLoad) {
+      autoLoadedExamIdRef.current = initialExamIdToLoad;
+      loadSavedExam(initialExamIdToLoad, '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialExamIdToLoad]);
 
   // THÊM MỚI: "Xuất bản - Lấy link" — soát lỗi trước (validateExamBeforePublish),
   // nếu có lỗi thì chặn lại và hiện modal đỏ liệt kê từng câu lỗi (không gọi
@@ -6654,6 +6693,22 @@ export default function ExamBuilder({
                         </>
                       )}
                     </button>
+                    {/* THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên):
+                        chỉ hiện nút này khi đề đã được lưu (có currentExamId)
+                        — cần ID thật để gọi API chia sẻ/xem trạng thái. */}
+                    {currentExamId && (
+                      <button
+                        type="button"
+                        onClick={() => setShowShareToLibraryModal(true)}
+                        className="inline-flex items-center gap-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold text-sm py-2 px-4 rounded-lg transition"
+                      >
+                        {/* SỬA (đồng bộ icon): thay emoji 📚 bằng OpenBookIcon
+                            đã có sẵn trong chính file này (dùng ở tab con
+                            "Xem đề"), không tạo icon mới trùng ý nghĩa. */}
+                        <OpenBookIcon className="w-4 h-4 shrink-0" />
+                        Chia sẻ vào kho chung
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -7576,6 +7631,18 @@ export default function ExamBuilder({
             </div>
           </div>
         </div>,
+        document.body
+      )}
+
+      {/* THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): popup "Chia
+          sẻ vào kho chung" — chỉ render khi có currentExamId (nút bấm mở
+          popup đã tự ẩn nếu chưa có, xem phía trên). */}
+      {showShareToLibraryModal && currentExamId && mounted && createPortal(
+        <ShareToLibraryModal
+          examId={currentExamId}
+          examTitle={examTitle}
+          onClose={() => setShowShareToLibraryModal(false)}
+        />,
         document.body
       )}
     </main>

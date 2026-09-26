@@ -9,8 +9,28 @@ import mongoose from 'mongoose';
 // "đang thi" (đã mở link, chưa nộp — dùng để phát hiện gian lận/thoát giữa
 // chừng sau này) → "đã nộp" (có điểm).
 const SubmissionSchema = new mongoose.Schema({
-  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
+  // SỬA (giai đoạn 1 — tài khoản học sinh, ĐIỂM SỬA FIELD CŨ DUY NHẤT được
+  // phép trong cả kế hoạch 5 giai đoạn, xem docs-moi/01-KE-HOACH-CHI-TIET.md):
+  // TRƯỚC ĐÂY required: true — GIỜ required: false, vì 1 lượt nộp bài từ
+  // "Ôn luyện"/"Đề được giao" qua tài khoản (giai đoạn 2/4) có thể không gắn
+  // với `Student` nào (học sinh làm đề ở "Ôn luyện" mà chưa join lớp nào).
+  // Toàn bộ logic cũ đọc studentId GIỮ NGUYÊN 100% — mọi Submission tạo qua
+  // luồng cũ (/api/thi/[examId]/submit không có tài khoản) vẫn luôn có
+  // studentId như trước, chỉ NỚI điều kiện bắt buộc ở tầng schema.
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: false },
   examId: { type: mongoose.Schema.Types.ObjectId, ref: 'Exam', required: true },
+
+  // THÊM MỚI (giai đoạn 1 — tài khoản học sinh): học sinh nào (tài khoản)
+  // đã nộp lượt này, độc lập với studentId (dòng roster của 1 lớp cụ thể)
+  // ở trên — 1 tài khoản có thể có studentId khác nhau ở mỗi lớp đã join,
+  // nhưng studentAccountId luôn là CHÍNH tài khoản đó. null cho mọi
+  // Submission tạo qua luồng cũ (không qua tài khoản đăng nhập).
+  studentAccountId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'StudentAccount',
+    default: null,
+    index: true,
+  },
 
   status: {
     type: String,

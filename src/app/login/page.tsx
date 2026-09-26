@@ -5,9 +5,24 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AppLogoIcon, APP_NAME } from '@/components/AppBranding';
 import { REGISTRATION_CLOSED_MESSAGE, REGISTRATION_APPROVAL_MESSAGE } from '@/lib/adminConfig';
+// THÊM MỚI (Giai đoạn 0 — bảng chọn vai trò): trang /login là nơi DUY NHẤT
+// mọi người dùng CHƯA đăng nhập (dù là GV hay HS) bị page.tsx redirect tới
+// (xem useEffect gọi /api/auth/me trong src/app/page.tsx, KHÔNG đổi gì ở
+// đó) — nên chỉ cần chặn/rẽ nhánh đúng 1 chỗ này là đủ, không phải sửa
+// page.tsx.
+import PortalChoice from '@/components/PortalChoice';
+import { getPortalChoice, clearPortalChoice, type PortalChoiceValue } from '@/lib/portalChoice';
 
 export default function LoginPage() {
   const router = useRouter();
+  // THÊM MỚI (Giai đoạn 0): 3 trạng thái ban đầu — null (đang đọc cookie,
+  // hiện màn chờ ngắn để tránh nháy giao diện), 'teacher' (hiện đúng form
+  // đăng nhập/đăng ký GV như cũ, KHÔNG đổi phía dưới), 'student' (route này
+  // chỉ trung chuyển, xem useEffect bên dưới — sẽ đẩy sang /student ngay,
+  // không tự vẽ giao diện HS tại đây để tránh trùng logic với trang
+  // /student).
+  const [portalChoice, setPortalChoiceState] = useState<PortalChoiceValue | null>(null);
+  const [checkingPortalChoice, setCheckingPortalChoice] = useState(true);
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,6 +41,24 @@ export default function LoginPage() {
   // "đang chờ duyệt" ngay tại trang này thay vì chuyển trang như bình
   // thường, vì chuyển trang sẽ chỉ đưa họ về lại đúng trang đăng nhập này.
   const [pendingMessage, setPendingMessage] = useState('');
+
+  // THÊM MỚI (Giai đoạn 0): đọc cookie NGAY khi trang vừa tải, chỉ 1 lần.
+  // - Đã từng chọn 'student' → không hiện form GV dù chỉ 1 khắc, đẩy thẳng
+  //   sang /student (trang đó tự lo đăng nhập/đăng ký HS + 2 tab).
+  // - Đã từng chọn 'teacher' → hiện đúng form đăng nhập/đăng ký GV bên dưới
+  //   như trước khi có Giai đoạn 0, không có gì khác biệt với GV đang dùng
+  //   app hiện tại.
+  // - Chưa từng chọn (cookie rỗng, người dùng hoàn toàn mới) → hiện bảng 2
+  //   nút <PortalChoice />.
+  useEffect(() => {
+    const existing = getPortalChoice();
+    if (existing === 'student') {
+      router.replace('/student');
+      return;
+    }
+    setPortalChoiceState(existing);
+    setCheckingPortalChoice(false);
+  }, [router]);
 
   useEffect(() => {
     fetch('/api/auth/register')
@@ -111,6 +144,36 @@ export default function LoginPage() {
     }
   }
 
+  // THÊM MỚI (Giai đoạn 0): màn chờ ngắn trong lúc đọc cookie, tránh nháy
+  // giao diện (đúng kiểu "Đang kiểm tra đăng nhập..." đã dùng ở page.tsx).
+  if (checkingPortalChoice) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-sm text-gray-400">Đang tải...</p>
+      </div>
+    );
+  }
+
+  // THÊM MỚI (Giai đoạn 0): chưa từng chọn vai trò → hiện bảng chọn, KHÔNG
+  // render form GV bên dưới. Chọn "giáo viên" thì set state để rơi thẳng
+  // xuống form cũ ngay (không cần tải lại trang); chọn "học sinh" thì đẩy
+  // sang /student.
+  if (portalChoice === null) {
+    return (
+      <PortalChoice
+        onChoose={(choice) => {
+          if (choice === 'student') {
+            router.replace('/student');
+          } else {
+            setPortalChoiceState('teacher');
+          }
+        }}
+      />
+    );
+  }
+
+  // Từ đây trở xuống: portalChoice === 'teacher' — TOÀN BỘ phần còn lại của
+  // component giữ NGUYÊN 100% như trước Giai đoạn 0, không sửa gì.
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-white border border-gray-200 rounded-xl shadow-sm p-7">
@@ -230,6 +293,23 @@ export default function LoginPage() {
             className="text-blue-600 font-semibold hover:underline"
           >
             {mode === 'login' ? 'Đăng ký ngay' : 'Đăng nhập'}
+          </button>
+        </p>
+
+        {/* THÊM MỚI (Giai đoạn 0): phòng trường hợp dùng chung máy (máy tính
+            ở lớp...) lỡ set nhầm cookie last_portal_choice = 'teacher' —
+            cho phép quay lại bảng chọn vai trò mà không cần xoá cookie thủ
+            công. Không đăng xuất ai cả, chỉ xoá "trí nhớ" lựa chọn. */}
+        <p className="text-xs text-gray-300 text-center mt-4">
+          <button
+            type="button"
+            onClick={() => {
+              clearPortalChoice();
+              setPortalChoiceState(null);
+            }}
+            className="hover:underline hover:text-gray-500"
+          >
+            Không phải bạn? Đổi vai trò
           </button>
         </p>
       </div>

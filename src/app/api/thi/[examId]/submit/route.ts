@@ -6,6 +6,9 @@ import { Exam } from '@/lib/examModel';
 import { ExamAssignmentModel } from '@/lib/examAssignmentModel';
 import { gradeExam, computeEssayMax, DEFAULT_SCORING } from '@/lib/grading';
 import { isSolutionUnlocked, canSelfRetake, resolveEffectiveSettings } from '@/lib/examAccessRules';
+// THÊM MỚI (Giai đoạn 2 — tab "Đề được giao"): chỉ IMPORT hàm đọc cookie HS
+// đã có sẵn từ Giai đoạn 1, KHÔNG sửa gì studentAuth.ts.
+import { getVerifiedStudentAccountIdFromRequest } from '@/lib/studentAuth';
 
 // POST /api/thi/[examId]/submit — CÔNG KHAI.
 // Body: { submissionId, classId, p1Answers, p2Answers, textAnswers, essayImages }
@@ -106,6 +109,17 @@ export async function POST(
     submission.essayImages = essayImages || undefined;
     submission.essayMaxScore = computeEssayMax((exam as any).raw_data, scoringUsed);
     submission.submitted_at = new Date();
+    // THÊM MỚI (Giai đoạn 2 — tab "Đề được giao"): CHỈ THÊM điều kiện, không
+    // đổi cách ghi studentId cũ ở trên. Nếu request này tới từ 1 trình duyệt
+    // đang có phiên đăng nhập học sinh hợp lệ (cookie student_session_token,
+    // tự động gửi kèm cùng-origin, không cần client truyền tay) thì ghi thêm
+    // studentAccountId song song — mọi lượt nộp qua link cũ (không đăng nhập
+    // tài khoản) sẽ không có cookie này, submission.studentAccountId vẫn giữ
+    // nguyên null như trước Giai đoạn 2, không có gì đổi khác.
+    const studentAccountId = await getVerifiedStudentAccountIdFromRequest(request);
+    if (studentAccountId) {
+      submission.studentAccountId = studentAccountId;
+    }
     await submission.save();
 
     // Quyết định "có được xem lời giải NGAY LÚC NÀY không" chuyển hẳn về

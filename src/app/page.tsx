@@ -14,6 +14,9 @@ import { isAdminEmail, ADMIN_CONTACT } from '@/lib/adminConfig';
 import EssayAnnotator from '@/components/EssayAnnotator';
 import { useInAppBrowserWarning } from '@/lib/useInAppBrowserWarning';
 import { AiHelpWidget } from '@/components/AiHelpWidget';
+// THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): mục quản trị cây
+// thư mục kho đề chung, xem AdminTab bên dưới.
+import LibraryAdminSection from './LibraryAdminSection';
 
 // THÊM LẠI (theo yêu cầu mới nhất): trước đây từng bỏ tab "Trang chủ" theo
 // khiếu nại "chỉ nên có 2 tab", giờ GV muốn có lại — quay về đủ 3 tab.
@@ -3268,7 +3271,9 @@ function AdminTab() {
   // khoản, nhật ký) dồn hết vào 1 trang cuộn dài. Giờ tách thành các mục
   // điều hướng con kiểu trang quản trị chuyên nghiệp (Tổng quan / Tài khoản
   // GV / Cấu hình AI / Nhật ký) — mỗi lúc chỉ hiện đúng 1 mục, đỡ rối mắt.
-  const [section, setSection] = useState<'overview' | 'teachers' | 'settings' | 'logs'>('overview');
+  // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): thêm mục
+  // 'library' — chỉ quản lý cấu trúc cây thư mục, xem LibraryAdminSection.
+  const [section, setSection] = useState<'overview' | 'teachers' | 'settings' | 'logs' | 'library'>('overview');
   // THÊM MỚI: gộp các nút thao tác theo dòng (Gia hạn/Vĩnh viễn/Thay mặt/
   // Khoá) — trước đây xếp thành 1 hàng chữ dài trong bảng — vào 1 menu
   // "···" bấm mới hiện, chỉ 1 menu mở tại 1 thời điểm.
@@ -3606,6 +3611,10 @@ function AdminTab() {
     { key: 'teachers' as const, label: 'Tài khoản GV', icon: <UsersIcon className="w-4 h-4" />, count: teachers.length },
     { key: 'settings' as const, label: 'Cấu hình', icon: <KeyIcon className="w-4 h-4" /> },
     { key: 'logs' as const, label: 'Nhật ký', icon: <ClockIcon className="w-4 h-4" />, count: logs.length },
+    // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): mục quản trị
+    // cấu trúc cây thư mục (LibraryAdminSection) — dùng lại FolderIcon đã
+    // có sẵn trong file này (dùng cho nhóm đề của GV), không tạo icon mới.
+    { key: 'library' as const, label: 'Kho đề chung', icon: <FolderIcon className="w-4 h-4" /> },
   ];
 
   return (
@@ -4112,6 +4121,11 @@ function AdminTab() {
           )}
         </div>
       )}
+
+      {/* THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): mục quản trị
+          cấu trúc cây thư mục — tách hẳn ra file riêng LibraryAdminSection,
+          chỉ render 1 dòng ở đây. */}
+      {section === 'library' && <LibraryAdminSection />}
     </div>
   );
 }
@@ -4365,6 +4379,10 @@ export default function Page() {
   // tính/tablet) vẫn giữ cột trái cố định như cũ vì ở đó đủ chỗ, không cần
   // ẩn/hiện.
   const [navOpen, setNavOpen] = useState(false);
+  // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): _id đề cần tự mở
+  // ngay trong ExamBuilder khi tới từ /kho-de-chung — xem effect đọc query
+  // param bên dưới.
+  const [autoOpenExamId, setAutoOpenExamId] = useState<string | null>(null);
 
   // Đọc query param "?tab=..." 1 LẦN lúc trang vừa tải xong để có thể trỏ
   // thẳng về đúng khu vực (vd link ngoài trỏ "/?tab=khoi") thay vì luôn rơi
@@ -4377,9 +4395,17 @@ export default function Page() {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
     const validTabs: MainTab[] = ['home', 'classes', 'khoi', 'exams', 'admin'];
+    // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): đọc kèm
+    // "?openExam=<id>" — GV vừa "Lấy đề về" ở /kho-de-chung được điều
+    // hướng tới đây bằng "/?tab=exams&openExam=<id>". Chỉ set state, việc
+    // mở đề thật do ExamBuilder tự làm qua prop initialExamIdToLoad (xem
+    // ExamBuilder.tsx) — page.tsx không tự gọi API tải đề nào ở đây.
+    const openExam = params.get('openExam');
+    if (openExam) setAutoOpenExamId(openExam);
     if (tab && (validTabs as string[]).includes(tab)) {
       setActiveTab(tab as MainTab);
       params.delete('tab');
+      params.delete('openExam');
       const newSearch = params.toString();
       const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
       window.history.replaceState(null, '', newUrl);
@@ -4619,6 +4645,23 @@ export default function Page() {
             {item.label}
           </button>
         ))}
+
+        {/* THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): link riêng
+            sang route /kho-de-chung (trang độc lập, không phải 1 MainTab
+            trong app này) — cố tình KHÔNG thêm vào mảng NAV_ITEMS ở trên
+            (mảng đó gắn với setActiveTab(item.key) kiểu MainTab nội bộ,
+            không hợp với việc điều hướng sang route khác bằng router.push). */}
+        <button
+          type="button"
+          onClick={() => {
+            router.push('/kho-de-chung');
+            setNavOpen(false);
+          }}
+          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors text-gray-600 hover:bg-gray-50"
+        >
+          <span><FolderIcon className="w-[18px] h-[18px]" /></span>
+          Kho đề chung
+        </button>
       </nav>
 
       {/* SỬA: trợ lý AI hỏi-đáp về app — trước đây là nút nổi kiểu "position:
@@ -4799,7 +4842,7 @@ export default function Page() {
                 SỬA (Phần 7): tab "Quản lý lớp" đã bị ẩn khỏi menu, GV giờ
                 giao đề qua "Khối" nên đổi đích đến sang 'khoi' — hành vi
                 tương đương (vẫn tự chuyển tab hộ GV), không xoá nút này. */}
-            <ExamBuilder onGoToClasses={() => setActiveTab('khoi')} />
+            <ExamBuilder onGoToClasses={() => setActiveTab('khoi')} initialExamIdToLoad={autoOpenExamId} />
           </div>
           {/* CHỈ mount AdminTab khi đúng tài khoản admin đang đăng nhập — GV
               thường không bao giờ tải/gọi API /api/admin/teachers, dù họ có

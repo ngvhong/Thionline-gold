@@ -37,6 +37,20 @@ const StudentSchema = new mongoose.Schema({
   approved: { type: Boolean, default: true },
 
   created_at: { type: Date, default: Date.now },
+
+  // THÊM MỚI (giai đoạn 1 — tài khoản học sinh): nối 1 dòng roster (thuộc 1
+  // lớp cụ thể, như field này vốn có từ trước) với 1 StudentAccount (tài
+  // khoản đăng nhập sống ở cấp toàn hệ thống, độc lập lớp — xem
+  // studentAccountModel.ts). null nghĩa là dòng roster này chưa có tài
+  // khoản nào "vào lớp" nhận đúng tên mình — mọi hành vi cũ (chọn tên qua
+  // link /thi/[examId], không cần tài khoản) hoạt động y hệt trước đây,
+  // hoàn toàn không phụ thuộc field mới này.
+  studentAccountId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'StudentAccount',
+    default: null,
+    index: true,
+  },
 });
 
 // 1 lớp không nên có 2 học sinh trùng tên + trùng ngày sinh (tránh nhập

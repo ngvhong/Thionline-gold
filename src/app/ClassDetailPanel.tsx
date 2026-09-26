@@ -58,6 +58,10 @@ type StudentItem = {
   // Mặc định true cho học sinh thường; chỉ false khi tự báo danh ở chế độ
   // 'approval' và GV chưa bấm "Duyệt".
   approved?: boolean;
+  // THÊM MỚI (giai đoạn 1 — tài khoản học sinh): true khi học sinh này đã
+  // "vào lớp" bằng 1 StudentAccount — chỉ dùng để hiện/ẩn nút "Đặt lại
+  // PIN" bên dưới, không có ý nghĩa gì khác.
+  hasStudentAccount?: boolean;
 };
 
 // Giao đề: chỉ cần vài field tối thiểu từ /api/exams (không cần raw_data/
@@ -221,6 +225,16 @@ function CheckIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <path d="M4.5 12.5 9.5 17.5 19.5 6.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// THÊM MỚI (giai đoạn 1 — tài khoản học sinh): icon cho nút "Đặt lại PIN".
+function KeyIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="8" cy="15" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M10.3 12.7 18 5l2 2-1.5 1.5 1.5 1.5-2 2-1.5-1.5L15 12.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -1881,6 +1895,23 @@ export default function ClassDetailPanel({
     }
   }
 
+  // THÊM MỚI (giai đoạn 1 — tài khoản học sinh): GV đặt lại PIN hộ học
+  // sinh đã có tài khoản (do quên PIN) — chỉ hiện nút này khi
+  // hasStudentAccount === true (xem chỗ render bên dưới). PIN mới hiện 1
+  // lần duy nhất qua alert (không lưu lại ở đâu để GV đọc lại cho học
+  // sinh), giống cách 1 số app hiện mật khẩu tạm 1 lần.
+  async function handleResetPin(studentId: string, name: string) {
+    if (!window.confirm(`Đặt lại PIN cho "${name}"? PIN cũ sẽ không dùng được nữa.`)) return;
+    try {
+      const res = await apiFetch<{ pin: string }>(`/api/teacher/students/${studentId}/reset-pin`, {
+        method: 'POST',
+      });
+      window.alert(`PIN mới của "${name}": ${res.pin}\n\nHãy đọc lại số này cho học sinh — PIN cũ đã ngừng hoạt động.`);
+    } catch (err: any) {
+      alert(err.message || 'Không đặt lại PIN được.');
+    }
+  }
+
   // Nút "‹ Quay lại" nhỏ phía trên breadcrumb — gọi `onBack` (KHÔNG tự điều
   // hướng route, nơi gọi component này tự quyết định rời khỏi panel để về
   // đâu, ví dụ danh sách lớp trong 1 Khối).
@@ -2568,6 +2599,14 @@ export default function ClassDetailPanel({
                     <CheckIcon className="w-3.5 h-3.5" />
                     Duyệt
                   </button>
+                )}
+                {s.hasStudentAccount && (
+                  <IconButton
+                    onClick={() => handleResetPin(s._id, s.name)}
+                    title="Đặt lại PIN (học sinh quên PIN đăng nhập)"
+                    icon={<KeyIcon className="w-4 h-4" />}
+                    hoverClass="hover:text-amber-600 hover:bg-amber-50"
+                  />
                 )}
                 <IconButton
                   onClick={() => {

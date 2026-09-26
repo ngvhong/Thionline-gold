@@ -42,6 +42,11 @@ export async function GET(request: NextRequest) {
           classId: String(s.classId),
           selfRegistered: !!s.selfRegistered,
           approved: s.approved !== false,
+          // THÊM MỚI (giai đoạn 1 — tài khoản học sinh): CHỈ trả có/không có
+          // tài khoản (boolean), KHÔNG trả thẳng studentAccountId — giao
+          // diện chỉ cần biết để hiện/ẩn nút "Đặt lại PIN", không cần biết
+          // id tài khoản đó.
+          hasStudentAccount: !!s.studentAccountId,
         })),
       },
       { status: 200 }
