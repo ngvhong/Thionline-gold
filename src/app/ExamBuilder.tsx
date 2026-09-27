@@ -1625,167 +1625,6 @@ function buildLiveExamData(data: any, shuffle: boolean) {
   return clone;
 }
 
-// Sinh ra N "mã đề" (101, 102, 103, ...) từ đề gốc — mỗi mã đề gọi
-// buildLiveExamData(data, true) ĐỘC LẬP (mỗi lần shuffleArray random lại từ
-// đầu) nên các mã đề trộn khác nhau thật sự, không phải copy cùng 1 bản.
-// count do giáo viên tự nhập (không cố định 4-5 mã) — chỉ cần >= 1.
-function generateExamCodes(data: any, count: number) {
-  const n = Math.max(1, Math.floor(count) || 1);
-  const codes: { code: string; data: any }[] = [];
-  for (let i = 0; i < n; i++) {
-    codes.push({ code: String(101 + i), data: buildLiveExamData(data, true) });
-  }
-  return codes;
-}
-
-// ==========================================
-// XUẤT PDF NHIỀU MÃ ĐỀ (in giấy, không cần database)
-// ==========================================
-// Mỗi mã đề gồm 2 phần khi in: (1) TRANG ĐỀ — y hệt học sinh cầm giấy làm
-// bài, KHÔNG đánh dấu đáp án đúng; (2) TRANG ĐÁP ÁN riêng ở CUỐI cùng của
-// TẤT CẢ các mã đề (để phát đề xong mới phát đáp án, không lẫn vào giữa).
-// page-break-after đảm bảo mỗi mã đề bắt đầu ở trang giấy mới khi in.
-function PrintExamCodePaper({
-  code,
-  data,
-  renderWithTikZ,
-  isLast,
-}: {
-  code: string;
-  data: any;
-  renderWithTikZ: (text: string) => any;
-  isLast: boolean;
-}) {
-  return (
-    <div
-      className="w-[210mm] min-h-[297mm] bg-white mx-auto p-[18mm] print:shadow-none"
-      style={{ pageBreakAfter: isLast ? 'auto' : 'always' }}
-    >
-      <div className="flex justify-between items-start border-b-2 border-black pb-3 mb-5">
-        <div className="text-sm leading-relaxed">
-          <p className="font-bold">ĐỀ KIỂM TRA</p>
-          <p>Họ và tên: .......................................</p>
-          <p>Lớp: ..................</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs">Mã đề</p>
-          <p className="text-3xl font-extrabold border-2 border-black px-4 py-1 rounded">{code}</p>
-        </div>
-      </div>
-
-      {Array.isArray(data.phan_1_TracNghiem) && data.phan_1_TracNghiem.length > 0 && (
-        <div className="mb-5">
-          <p className="font-bold mb-2">PHẦN I. Trắc nghiệm (chọn 1 đáp án)</p>
-          {data.phan_1_TracNghiem.map((q: any, i: number) => (
-            <div key={q.id} className="mb-3 text-[14px] leading-relaxed">
-              {/* SỬA LỖI: đổi <p> thành <div> — nội dung câu hỏi/phương án có
-                  thể chứa bảng thống kê LaTeX (<table>/<div>), mà <p> không
-                  được phép chứa thẻ khối, trình duyệt tự "vá" DOM khiến
-                  React báo lỗi hydration (xem log lỗi thực tế đã gặp). */}
-              <div className="font-semibold">Câu {i + 1}: {renderWithTikZ(q.content)}</div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1 pl-2">
-                {q.options.map((opt: any, oIdx: number) => (
-                  <div key={oIdx}><span className="font-semibold mr-1 text-blue-700">{String.fromCharCode(65 + oIdx)}.</span>{renderWithTikZ(opt.text)}</div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {Array.isArray(data.phan_2_DungSai) && data.phan_2_DungSai.length > 0 && (
-        <div className="mb-5">
-          <p className="font-bold mb-2">PHẦN II. Đúng / Sai</p>
-          {data.phan_2_DungSai.map((q: any, i: number) => (
-            <div key={q.id} className="mb-3 text-[14px] leading-relaxed">
-              <div className="font-semibold">Câu {i + 1}: {renderWithTikZ(q.content)}</div>
-              <div className="pl-2 mt-1">
-                {q.options.map((opt: any, oIdx: number) => (
-                  <div key={oIdx}><span className="font-semibold mr-1 text-blue-700">{String.fromCharCode(97 + oIdx)})</span>{renderWithTikZ(opt.text)} <span className="inline-block ml-2">Đúng ☐ &nbsp; Sai ☐</span></div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {Array.isArray(data.phan_3_TraLoiNgan) && data.phan_3_TraLoiNgan.length > 0 && (
-        <div className="mb-5">
-          <p className="font-bold mb-2">PHẦN III. Trả lời ngắn</p>
-          {data.phan_3_TraLoiNgan.map((q: any, i: number) => (
-            <div key={q.id} className="mb-3 text-[14px] leading-relaxed">
-              <div className="font-semibold">Câu {i + 1}: {renderWithTikZ(q.content)}</div>
-              <p className="mt-1">Đáp số: <span className="inline-block border-b border-black w-28">&nbsp;</span></p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {Array.isArray(data.phan_4_TuLuan) && data.phan_4_TuLuan.length > 0 && (
-        <div className="mb-5">
-          <p className="font-bold mb-2">PHẦN IV. Tự luận</p>
-          {data.phan_4_TuLuan.map((q: any, i: number) => (
-            <div key={q.id} className="mb-3 text-[14px] leading-relaxed">
-              <div className="font-semibold">Câu {i + 1}: {renderWithTikZ(q.content)}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Trang đáp án riêng của 1 mã đề — luôn nằm ở CUỐI xấp giấy (giáo viên tách
-// riêng phần này ra trước khi phát đề cho học sinh).
-function PrintAnswerKeyPage({ code, data, isLast }: { code: string; data: any; isLast: boolean }) {
-  return (
-    <div
-      className="w-[210mm] min-h-[297mm] bg-white mx-auto p-[18mm] print:shadow-none"
-      style={{ pageBreakAfter: isLast ? 'auto' : 'always' }}
-    >
-      <p className="font-bold text-lg mb-4">ĐÁP ÁN — MÃ ĐỀ {code}</p>
-
-      {Array.isArray(data.phan_1_TracNghiem) && data.phan_1_TracNghiem.length > 0 && (
-        <div className="mb-4">
-          <p className="font-bold mb-1">Phần I</p>
-          <div className="grid grid-cols-6 gap-2 text-sm">
-            {data.phan_1_TracNghiem.map((q: any, i: number) => {
-              const correctIdx = q.options.findIndex((o: any) => o.isCorrect);
-              return (
-                <span key={q.id}>Câu {i + 1}: <b>{correctIdx >= 0 ? String.fromCharCode(65 + correctIdx) : '?'}</b></span>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {Array.isArray(data.phan_2_DungSai) && data.phan_2_DungSai.length > 0 && (
-        <div className="mb-4">
-          <p className="font-bold mb-1">Phần II</p>
-          {data.phan_2_DungSai.map((q: any, i: number) => (
-            <p key={q.id} className="text-sm">
-              Câu {i + 1}: {q.options.map((o: any, oIdx: number) => (
-                <span key={oIdx} className="mr-3">{String.fromCharCode(97 + oIdx)}) <b>{o.isCorrect ? 'Đ' : 'S'}</b></span>
-              ))}
-            </p>
-          ))}
-        </div>
-      )}
-
-      {Array.isArray(data.phan_3_TraLoiNgan) && data.phan_3_TraLoiNgan.length > 0 && (
-        <div className="mb-4">
-          <p className="font-bold mb-1">Phần III</p>
-          <div className="grid grid-cols-4 gap-2 text-sm">
-            {data.phan_3_TraLoiNgan.map((q: any, i: number) => (
-              <span key={q.id}>Câu {i + 1}: <b>{extractAnswerDigits(q.answer)}</b></span>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ==========================================
 // GIAO DIỆN HỌC SINH LÀM BÀI (StudentExamView)
 // ==========================================
@@ -3168,25 +3007,6 @@ export default function ExamBuilder({
   // điểm tối đa) — bấm vào mới xổ ra đủ 3 ô nhập để chỉnh.
   const [scoringOpen, setScoringOpen] = useState(false);
 
-  // ==========================================
-  // XUẤT PDF NHIỀU MÃ ĐỀ (in giấy, làm hoàn toàn client, không cần DB)
-  // ==========================================
-  // examCodeCount: giáo viên tự gõ số lượng mã đề muốn xuất — KHÔNG cố định
-  // 4 hay 5, có thể là 1, 2, 10... printCodes: mảng {code, data} đã "đóng
-  // băng" tại thời điểm bấm xuất (mỗi mã trộn random độc lập qua
-  // generateExamCodes) — null nghĩa là chưa xuất/đã đóng khung xem trước.
-  const [examCodeCount, setExamCodeCount] = useState(4);
-  const [printCodes, setPrintCodes] = useState<{ code: string; data: any }[] | null>(null);
-
-  // THAY THẾ window.print(): trước đây nút "In / Lưu PDF" chỉ mở hộp thoại
-  // in gốc của trình duyệt (GV tự chọn "Save as PDF" trong đó, chất lượng
-  // phụ thuộc render CSS của trình duyệt). Giờ gọi thẳng
-  // POST /api/exams/export-pdf-codes để server dựng file PDF THẬT bằng
-  // pandoc/xelatex rồi tải trực tiếp về máy — không cần thao tác gì thêm ở
-  // hộp thoại in.
-  const [isExportingPdfCodes, setIsExportingPdfCodes] = useState(false);
-  const [pdfCodesExportError, setPdfCodesExportError] = useState('');
-
   // `document` chỉ tồn tại ở phía client, nên createPortal chỉ được gọi SAU
   // khi component đã mount xong ở browser — tránh lỗi hydration mismatch
   // giữa server (render null) và client (render vào document.body).
@@ -3226,11 +3046,6 @@ export default function ExamBuilder({
   // lần Lưu/Xuất bản tới sẽ tạo bản ghi mới như trước giờ.
   const [currentExamId, setCurrentExamId] = useState<string | null>(null);
 
-  // THÊM MỚI (Phần 1 - HANDOFF-PHAN3-LIVEQUIZ.md): banner rẽ nhánh
-  // "Tạo đề / Trình chiếu trực tiếp" — bật đúng 1 lần ngay khi vừa biên
-  // dịch xong 1 đề (xem processExamText), tự đóng khi bấm 1 trong 2 lựa
-  // chọn hoặc bấm ✕. Không chặn thao tác nào khác (không phải modal) —
-  // GV vẫn dùng "Xem đề"/"Cài đặt" bình thường dù banner còn đang hiện.
   const router = useRouter();
 
 
@@ -5080,52 +4895,6 @@ export default function ExamBuilder({
     }
   };
 
-  // THAY THẾ window.print(): gửi nguyên `printCodes` (N mã đề đã trộn ở
-  // client bằng generateExamCodes) sang POST /api/exams/export-pdf-codes —
-  // route đó dựng markdown thật (đề từng mã + đáp án gộp cuối, y hệt bố
-  // cục PrintExamCodePaper/PrintAnswerKeyPage) rồi nhờ Space Hugging Face
-  // chạy pandoc/xelatex xuất PDF thật, trả buffer về đây để tải xuống.
-  // KHÔNG cần currentExamId/đề đã lưu — dữ liệu mã đề đi thẳng trong body.
-  const exportPrintCodesPdf = async () => {
-    setPdfCodesExportError('');
-    if (!printCodes || printCodes.length === 0) {
-      setPdfCodesExportError('⚠️ Hãy bấm "Tạo mã đề" trước để có dữ liệu mã đề cần xuất.');
-      return;
-    }
-    setIsExportingPdfCodes(true);
-    try {
-      const res = await fetch('/api/exams/export-pdf-codes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: examTitle || texFileName.replace(/\.[^/.]+$/, ''),
-          codes: printCodes,
-        }),
-      });
-      if (!res.ok) {
-        const result = await res.json().catch(() => null);
-        throw new Error(result?.error || 'Xuất file PDF thất bại.');
-      }
-      const blob = await res.blob();
-      const disposition = res.headers.get('Content-Disposition') || '';
-      const match = disposition.match(/filename="?([^"]+)"?/);
-      const filename = match ? match[1] : `${examTitle || 'De_thi'}_${printCodes.length}MaDe.pdf`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Lỗi xuất PDF nhiều mã đề:', err);
-      setPdfCodesExportError(`❌ ${err instanceof Error ? err.message : 'Xuất file PDF thất bại.'}`);
-    } finally {
-      setIsExportingPdfCodes(false);
-    }
-  };
-
   // Nhận `parsedData` đã bóc tách sẵn (từ parser.ts khi upload file, hoặc từ
   // MongoDB khi mở lại đề đã lưu) — set toàn bộ state hiển thị + gửi ngầm
   // từng hình TikZ sang Hugging Face để biên dịch. Tách riêng hàm này để
@@ -5774,40 +5543,6 @@ export default function ExamBuilder({
           không chỉ riêng tab "Xem đề" này — xem giải thích đầy đủ ở đó (sửa
           lỗi "hình hiện to rồi tự thu nhỏ sau 1-2s" chỉ xảy ra ở các trang
           KHÁC ngoài "Xem đề"). */}
-      <style jsx global>{`
-        @media print {
-          /* QUAN TRỌNG: nếu KHÔNG khai báo @page, trình duyệt tự cộng thêm
-             LỀ IN MẶC ĐỊNH CỦA RIÊNG NÓ (thường ~12-19mm, tuỳ trình duyệt)
-             CHỒNG LÊN phần đệm 18mm đã có sẵn trong chính khối đề thi
-             (".p-[18mm]" ở #print-exam-area, xem JSX bên dưới) — khiến tổng
-             chiều rộng vượt quá khổ A4 thật, trình in phải co/dịch nội dung
-             để vừa trang, kết quả là lề trái trông "dày" còn lề phải gần như
-             sát mép giấy (không đều 2 bên). Đặt margin: 0 ở @page để lề in
-             của TRÌNH DUYỆT bằng 0, để 18mm padding của khối đề thi là lề
-             DUY NHẤT — đảm bảo đều nhau ở cả 4 cạnh khi xuất PDF/in giấy.
-             size: A4 đảm bảo khổ giấy đúng ngay cả khi máy đang đặt khổ khác
-             (Letter...) làm mặc định. */
-          @page {
-            size: A4;
-            margin: 0;
-          }
-          html, body {
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          body * {
-            visibility: hidden;
-          }
-          #print-exam-area, #print-exam-area * {
-            visibility: visible;
-          }
-          #print-exam-area {
-            position: static !important;
-            opacity: 1 !important;
-            pointer-events: auto !important;
-          }
-        }
-      `}</style>
       {/* Thanh Tiêu đề */}
       <div className="bg-white shadow-sm border-b p-6 mb-8">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
@@ -6715,37 +6450,6 @@ export default function ExamBuilder({
             </div>
           </div>
         )}
-
-        {/* Vùng xem trước + in: CHỈ hiển thị khi đã bấm "Tạo mã đề". Ẩn khỏi
-            màn hình thường (fixed off-screen) nhưng vẫn render để trình duyệt
-            có nội dung khi bấm Ctrl+P/window.print(); khối "print:block" của
-            CSS in (xem thẻ <style> bên dưới) sẽ hiện đúng khối này và ẩn hết
-            phần còn lại của trang khi in. */}
-        {data && printCodes && (
-          <div id="print-exam-area" className="fixed left-0 top-0 w-full bg-white z-[9999]" style={{ pointerEvents: 'none', opacity: 0 }}>
-            {printCodes.map((pc, idx) => (
-              <PrintExamCodePaper
-                key={`paper-${pc.code}-${idx}`}
-                code={pc.code}
-                data={pc.data}
-                renderWithTikZ={renderWithTikZ}
-                isLast={false}
-              />
-            ))}
-            {printCodes.map((pc, idx) => (
-              <PrintAnswerKeyPage
-                key={`key-${pc.code}-${idx}`}
-                code={pc.code}
-                data={pc.data}
-                isLast={idx === printCodes.length - 1}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* CSS in ấn (@media print) đã được gộp vào thẻ <style jsx global>
-            chung ở đầu component — Next.js không cho phép 2 thẻ <style jsx>
-            trong cùng 1 component (lỗi "nested styled-jsx tag"). */}
 
         {data && examMode === 'live' && liveExamData && (
           // Bọc TOÀN MÀN HÌNH (fixed inset-0, z cao) — che hẳn khung dashboard

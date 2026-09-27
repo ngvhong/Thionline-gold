@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
-    "@sparticuz/chromium": "^149.0.0",
     "@vercel/blob": "^2.6.1",
     "bcryptjs": "^3.0.3",
     "canvas-confetti": "^1.9.4",
@@ -22,7 +21,6 @@
     "mongoose": "^9.7.4",
     "next": "16.2.10",
     "nodemailer": "^9.0.3",
-    "puppeteer-core": "^25.3.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-latex-next": "^3.0.0",
@@ -41,7 +39,6 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
-    "puppeteer": "^25.3.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
