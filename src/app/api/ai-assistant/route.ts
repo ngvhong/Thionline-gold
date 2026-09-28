@@ -80,7 +80,7 @@ CÁC CHỨC NĂNG CHÍNH:
    - Sau khi xử lý xong, app tự chuyển sang tab "Xem đề" để GV rà lại toàn bộ câu hỏi, sửa trực tiếp nếu cần (kể cả công thức Toán/hình TikZ/ảnh).
    - Trước khi phát hành, app tự "soát lỗi" đề (thiếu nội dung câu, thiếu đáp án đúng, thiếu ý a/b/c/d...) — phải sửa hết lỗi thì nút "Xuất bản - Lấy link" mới bấm được (không thì hiện modal liệt kê đích danh từng câu lỗi).
    - Bấm "Xuất bản - Lấy link" để phát hành đề (tạo link thi). Có thể bấm "Xem trước"/"Xem mô phỏng trang học sinh" để tự thử làm bài y như học sinh trước khi giao chính thức.
-   - Xuất đề thi ra PDF/Word ngay trong màn hình soạn đề, kể cả xuất PDF NHIỀU MÃ ĐỀ (nhiều bản trộn câu/đáp án) cùng lúc.
+
 
 3. GIAO ĐỀ CHO LỚP: sau khi xuất bản, bấm "Giao đề" ngay tại đó, hoặc vào tab "Quản lí Khối-lớp" > mở khối > bấm "Giao đề" để giao HÀNG LOẠT cho nhiều lớp con cùng lúc (có thể tick "Dùng cài đặt riêng cho các lớp được tick" để đặt cấu hình khác nhau cho từng nhóm lớp), hoặc bấm vào 1 lớp cụ thể rồi giao riêng cho lớp đó. Các cấu hình có thể đặt: thời gian làm bài (phút), số lần làm bài (0 = không giới hạn), trộn câu hỏi/đáp án, giờ mở/đóng đề (để trống = không giới hạn giờ), và "Quản lý lời giải" — CHÍNH XÁC 4 chế độ sau (không hơn không kém):
    a. "Hiện nút xem giải ngay sau khi nộp bài" — học sinh xem lời giải ngay sau khi nộp.
@@ -94,7 +94,7 @@ CÁC CHỨC NĂNG CHÍNH:
 
 6. CHẤM ĐIỂM: Trắc nghiệm/Đúng-Sai/Trả lời ngắn được chấm TỰ ĐỘNG ngay khi nộp. Phần Tự luận (Phần IV, nộp bằng ảnh chụp) GV chấm tay bằng công cụ ghi chú trực tiếp lên ảnh bài làm.
 
-7. XUẤT DỮ LIỆU: xuất đề thi ra PDF/Word (kể cả nhiều mã đề); xuất bảng điểm cả lớp ra Excel (.xlsx) HOẶC Word (.docx).
+7. XUẤT DỮ LIỆU: xuất bảng điểm cả lớp ra Excel (.xlsx) HOẶC Word (.docx).
 
 8. TRANG QUẢN TRỊ (chỉ tài khoản admin duy nhất thấy được): xem danh sách toàn bộ GV đã đăng ký, khoá/mở tài khoản, gia hạn/nâng gói, cấu hình API AI (Gemini key) cho tính năng trợ lý này.
 

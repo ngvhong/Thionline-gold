@@ -12,7 +12,8 @@ import { buildScoreWorkbook, buildScoreDocx } from '@/lib/scoreExport';
 //   bảng duy nhất, kiểu bảng điểm Azota vẫn hay xuất — mỗi hàng 1 học sinh,
 //   mỗi cột 1 đề. format=list chỉ trả về JSON danh sách đề (không tạo file)
 //   để giao diện hiện bảng chọn đề trước khi tải.
-// THÊM MỚI (mục 4).
+// THÊM MỚI (mục 4). SỬA: khôi phục nhánh format=docx (xuất Word) song song
+// với xlsx, dùng chung dữ liệu buildScoreTable (có scoreMode).
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -80,12 +81,10 @@ export async function GET(
     // được file nào tính kiểu gì nếu tải cả 2 bản để đối chiếu.
     const modeTag = scoreMode === 'highest' ? '_DiemCaoNhat' : '';
 
+    // Bọc tường minh bằng Uint8Array để qua kiểm tra kiểu BodyInit (tsc), không
+    // đổi hành vi byte nào.
     if (format === 'xlsx') {
       const buf = await buildScoreWorkbook(data);
-      // SỬA LỖI KIỂU (tsc): Buffer không nằm trong danh sách kiểu BodyInit mà
-      // @types/node mới khai báo cho Response/NextResponse dù chạy ĐÚNG lúc
-      // thực thi (Buffer vốn là Uint8Array) — bọc tường minh bằng Uint8Array
-      // để qua kiểm tra kiểu, không đổi hành vi byte nào.
       return new NextResponse(new Uint8Array(buf), {
         status: 200,
         headers: {
@@ -95,8 +94,8 @@ export async function GET(
       });
     }
 
-    const buf = await buildScoreDocx(data);
-    return new NextResponse(new Uint8Array(buf), {
+    const docBuf = await buildScoreDocx(data);
+    return new NextResponse(new Uint8Array(docBuf), {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

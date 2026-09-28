@@ -4140,6 +4140,8 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
   // phẳng. Tự làm mới mỗi 20 giây (polling đơn giản, không cần WebSocket) để
   // GV không phải bấm F5 tay mới thấy cập nhật khi có em bắt đầu/nộp bài.
   const [liveStudents, setLiveStudents] = useState<LiveStudent[]>([]);
+  // SỬA (khiếu nại điện thoại): "Đang thi" gộp thành 1 dòng gọn, bấm mới xổ danh sách.
+  const [liveOpen, setLiveOpen] = useState(false);
   const [liveError, setLiveError] = useState('');
 
   useEffect(() => {
@@ -4213,31 +4215,47 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
           liveStudents phía trên. Chỉ hiện khối này khi có ít nhất 1 em đang
           thi, tránh chiếm chỗ trang chủ lúc không ai làm bài. */}
       {liveStudents.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm mb-7">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="relative flex h-2.5 w-2.5">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-7 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setLiveOpen((v) => !v)}
+            aria-expanded={liveOpen}
+            className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+          >
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
             </span>
-            <p className="font-bold text-gray-900">Đang thi ({liveStudents.length})</p>
-          </div>
-          <ul className="divide-y divide-gray-100">
-            {liveStudents.map((s) => (
-              <li key={`${s.studentId}-${s.examId}`} className="py-2 flex items-center justify-between gap-3 text-sm">
-                <div className="min-w-0">
-                  <p className="font-medium text-gray-800 truncate">{s.studentName}</p>
-                  <p className="text-xs text-gray-400 truncate">
-                    {s.className} · {s.examTitle}
-                  </p>
-                </div>
-                {s.started_at && (
-                  <p className="text-xs text-gray-400 shrink-0">
-                    Bắt đầu: {new Date(s.started_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
+            <span className="flex-1 font-bold text-gray-900">Đang thi ({liveStudents.length})</span>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              className={`w-5 h-5 text-gray-400 shrink-0 transition-transform ${liveOpen ? 'rotate-180' : ''}`}
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {liveOpen && (
+            <ul className="divide-y divide-gray-100 px-4 pb-2 border-t border-gray-100">
+              {liveStudents.map((s) => (
+                <li key={`${s.studentId}-${s.examId}`} className="py-2 flex items-center justify-between gap-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-800 truncate">{s.studentName}</p>
+                    <p className="text-xs text-gray-400 truncate">
+                      {s.className} · {s.examTitle}
+                    </p>
+                  </div>
+                  {s.started_at && (
+                    <p className="text-xs text-gray-400 shrink-0">
+                      Bắt đầu: {new Date(s.started_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
       {liveError && liveStudents.length === 0 && (

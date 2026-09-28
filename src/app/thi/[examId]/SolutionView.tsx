@@ -39,6 +39,7 @@ export default function SolutionView({
   textAnswers,
   scoring,
   imageScalePercent,
+  presentMode = false,
   onClose,
 }: {
   examData: any;
@@ -56,6 +57,10 @@ export default function SolutionView({
   // (examSettings.imageScalePercent), truyền vào đây để trang lời giải hiển
   // thị ĐÚNG cỡ hình như trang làm bài/xem trước, không bị lệch riêng.
   imageScalePercent?: number;
+  // Không còn nơi nào truyền true nữa (tính năng trình chiếu/live quiz đã
+  // gỡ bỏ) — giữ lại field + logic bên dưới vì vô hại (mặc định false =
+  // đúng hành vi màn HS xem lại bài như trước), phòng khi cần bật lại.
+  presentMode?: boolean;
   onClose: () => void;
 }) {
   const tikzSvgMap = useMemo(() => buildTikzSvgMap(examData?.tikz_list), [examData]);
@@ -95,9 +100,11 @@ export default function SolutionView({
           <span className="text-gray-400 text-sm hidden sm:inline">đối chiếu bài làm của em</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="font-bold text-sm sm:text-lg px-2.5 sm:px-3 py-1 rounded-lg bg-green-100 text-green-700">
-            ✅ {result.scorePoints}/{result.maxScorePoints} điểm
-          </span>
+          {!presentMode && (
+            <span className="font-bold text-sm sm:text-lg px-2.5 sm:px-3 py-1 rounded-lg bg-green-100 text-green-700">
+              ✅ {result.scorePoints}/{result.maxScorePoints} điểm
+            </span>
+          )}
           <button
             onClick={onClose}
             className="bg-slate-700 hover:bg-slate-800 active:bg-slate-900 active:scale-95 text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
@@ -269,10 +276,20 @@ export default function SolutionView({
                   </div>
                 </div>
                 <p className="text-sm">
-                  Em đáp: <span className="font-mono font-semibold">{given || '(bỏ trống)'}</span>{' '}
-                  {!detail?.correct && (
-                    <span className="ml-3 text-green-700">
-                      Đáp số đúng: <span className="font-mono font-semibold">{expected}</span>
+                  {!presentMode && (
+                    <>
+                      Em đáp: <span className="font-mono font-semibold">{given || '(bỏ trống)'}</span>{' '}
+                    </>
+                  )}
+                  {(presentMode || !detail?.correct) && (
+                    <span className={presentMode ? '' : 'ml-3 text-green-700'}>
+                      {presentMode ? (
+                        <>Đáp số: <span className="font-mono font-semibold">{expected}</span></>
+                      ) : (
+                        <span className="text-green-700">
+                          Đáp số đúng: <span className="font-mono font-semibold">{expected}</span>
+                        </span>
+                      )}
                     </span>
                   )}
                 </p>

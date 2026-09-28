@@ -4,12 +4,12 @@
 // không có logo, chỉ có chữ hoặc emoji tạm. Tách ra đây để MỌI trang import
 // chung 1 nguồn, sửa 1 chỗ là đổi đồng bộ khắp app.
 //
-// GHI CHÚ: tên app hiện tại là "Thionline-opal" — đặt thành 1 hằng
+// GHI CHÚ: tên app hiện tại là "Thionline-ap" — đặt thành 1 hằng
 // số DUY NHẤT ở đây để khi có tên chính thức mới, chỉ cần sửa đúng 1 dòng
 // APP_NAME bên dưới là áp dụng lại toàn bộ app (sidebar, topbar, trang đăng
 // nhập, thẻ <title>, các màn học sinh...), không phải tìm sửa rải rác nhiều
 // file như trước.
-export const APP_NAME = 'Thionline-opal';
+export const APP_NAME = 'Thionline-ap';
 
 export function AppLogoIcon({ className }: { className?: string }) {
   // SỬA (khiếu nại: "logo hiện không đủ trên điện thoại" + "thiết kế lại

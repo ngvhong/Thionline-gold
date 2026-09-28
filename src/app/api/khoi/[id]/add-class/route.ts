@@ -4,6 +4,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import { KhoiModel } from '@/lib/khoiModel';
 import { ClassModel } from '@/lib/classModel';
 import { getVerifiedTeacherIdFromRequest } from '@/lib/auth';
+import { generateUniqueInviteCode } from '@/lib/classInviteCode';
 
 async function findOwnedKhoi(id: string, teacherId: string) {
   if (!mongoose.Types.ObjectId.isValid(id)) return null;
@@ -101,6 +102,7 @@ export async function POST(
         schoolYear: resolvedSchoolYear,
         ownerId: teacherId,
         khoiId: khoi._id,
+        inviteCode: await generateUniqueInviteCode(),
       });
 
       return NextResponse.json(

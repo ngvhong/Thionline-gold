@@ -89,7 +89,7 @@ function JoinClassForm({
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value)}
             placeholder="Ví dụ: AB12CD"
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             type="button"
@@ -341,7 +341,7 @@ function StudentHome({
   }
 
   return (
-    <div className="w-full max-w-md">
+    <div className="w-full max-w-md text-left">
       <div className="flex items-center justify-between mb-4">
         <div>
           <p className="font-semibold text-gray-800">{account.name}</p>
@@ -508,7 +508,7 @@ export default function StudentApp() {
             clearPortalChoice();
             router.push('/login');
           }}
-          className="text-xs text-gray-400 hover:text-gray-600 hover:underline mt-5"
+          className="text-sm font-semibold text-gray-600 hover:text-gray-900 underline underline-offset-2 mt-5"
         >
           Không phải bạn? Đổi vai trò
         </button>

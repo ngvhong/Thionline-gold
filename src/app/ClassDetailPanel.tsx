@@ -1541,7 +1541,7 @@ export default function ClassDetailPanel({
   // bật/tắt độc lập với form "Thêm học sinh" (chỉ 1 trong 2 mở tại 1 thời điểm).
   const [showImportStudents, setShowImportStudents] = useState(false);
 
-  // Menu xuất bảng điểm Excel/Word (đóng/mở khi bấm nút "Bảng điểm").
+  // Menu xuất bảng điểm Excel (đóng/mở khi bấm nút "Bảng điểm").
   const [showScoreExportMenu, setShowScoreExportMenu] = useState(false);
   // Danh sách đề đã từng giao cho lớp đang xem (lấy qua format=list) + đề
   // nào đang được chọn để lọc — cho phép GV xuất bảng điểm CHỈ 1 đề thay vì
@@ -2260,7 +2260,7 @@ export default function ClassDetailPanel({
           >
             Giao đề
           </SecondaryButton>
-          {/* Xuất bảng điểm Excel/Word, gộp tất cả các đề đã giao cho lớp
+          {/* Xuất bảng điểm Excel, gộp tất cả các đề đã giao cho lớp
               này thành 1 bảng — kiểu Azota. Dùng thẻ <a> tải trực tiếp qua
               GET (trình duyệt tự kèm cookie đăng nhập), không cần gọi
               fetch/blob thủ công. */}
@@ -2375,6 +2375,39 @@ export default function ClassDetailPanel({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Mã lớp: học sinh nhập mã này ở cổng học sinh (sau khi đăng ký tài
+          khoản) để chọn tên mình trong danh sách lớp. Mã được server tự sinh
+          khi tạo lớp (lớp cũ được bù mã khi mở chi tiết). */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <span className="block text-sm font-medium text-gray-700">Mã lớp</span>
+          <span className="block text-xs text-gray-400">Gửi mã này cho học sinh để các em vào lớp ở cổng học sinh.</span>
+        </div>
+        {classDetail?.inviteCode ? (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="font-mono font-bold text-lg tracking-widest text-blue-700 bg-white border border-gray-300 rounded-lg px-3 py-1 select-all">
+              {classDetail.inviteCode}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const code = classDetail.inviteCode || '';
+                try {
+                  navigator.clipboard?.writeText(code);
+                } catch {
+                  /* bỏ qua nếu trình duyệt chặn clipboard */
+                }
+              }}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 border border-blue-200 hover:bg-blue-50 rounded-lg px-2.5 py-1.5"
+            >
+              Sao chép
+            </button>
+          </div>
+        ) : (
+          <span className="text-xs text-gray-400 ml-auto">Đang tạo mã…</span>
+        )}
       </div>
 
       {/* Tự báo danh kiểu Azota: nút gạt 3 trạng thái thay vì checkbox

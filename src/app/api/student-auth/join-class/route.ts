@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     await connectToDatabase();
 
-    const cls = await ClassModel.findOne({ inviteCode: String(inviteCode).trim() }).lean();
+    const cls = await ClassModel.findOne({ inviteCode: String(inviteCode).trim().toUpperCase() }).lean();
     if (!cls) {
       return NextResponse.json({ error: 'Không tìm thấy lớp với mã này.' }, { status: 404 });
     }

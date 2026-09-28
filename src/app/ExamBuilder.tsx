@@ -1506,17 +1506,6 @@ function extractAnswerDigits(text: string): string {
   return text.replace(/[^0-9+\-,]/g, '');
 }
 
-// Xáo trộn mảng theo thuật toán Fisher-Yates — trả về MẢNG MỚI, không sửa
-// mảng gốc (để `data` gốc của giáo viên không bị đổi khi bật "trộn đề").
-function shuffleArray<T>(arr: T[]): T[] {
-  const result = [...arr];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
-
 // THÊM MỚI: soát lỗi đề thi trước khi cho phép "Xuất bản - Lấy link" (theo
 // đúng tinh thần Azota — chặn xuất bản, chỉ đích danh câu nào lỗi). Hàm
 // thuần, không đụng state, nhận `data` (đề đã bóc tách) + `tikzFailedMap`
@@ -1599,31 +1588,6 @@ function validateExamBeforePublish(
   return errors;
 }
 
-
-// SỬA LỖI CÓ SẴN: dòng khai báo hàm này bị thiếu trong bản export trước đó,
-// khiến toàn bộ file lỗi cú pháp (không biên dịch được). Thêm lại đúng chữ ký
-// khớp với 2 nơi đang gọi: buildLiveExamData(data, true) ở generateExamCodes
-// và buildLiveExamData(data, examSettings.shuffle) lúc "Kích hoạt Phòng Thi".
-// Trả về BẢN SAO của `data`, xáo trộn thứ tự câu/phương án nếu shuffle=true.
-function buildLiveExamData(data: any, shuffle: boolean) {
-  const clone = JSON.parse(JSON.stringify(data));
-  if (!shuffle) return clone;
-  // Phần I: trộn thứ tự câu + trộn luôn thứ tự phương án trong mỗi câu.
-  if (Array.isArray(clone.phan_1_TracNghiem)) {
-    clone.phan_1_TracNghiem = shuffleArray(clone.phan_1_TracNghiem).map((q: any) => ({
-      ...q,
-      options: Array.isArray(q.options) ? shuffleArray(q.options) : q.options,
-    }));
-  }
-  // Phần II/III/IV: CHỈ trộn thứ tự câu, KHÔNG đụng vào thứ tự phương án
-  // bên trong từng câu (giữ nguyên a/b/c/d gốc của Phần II).
-  (['phan_2_DungSai', 'phan_3_TraLoiNgan', 'phan_4_TuLuan'] as const).forEach((key) => {
-    if (Array.isArray(clone[key])) {
-      clone[key] = shuffleArray(clone[key]);
-    }
-  });
-  return clone;
-}
 
 // ==========================================
 // GIAO DIỆN HỌC SINH LÀM BÀI (StudentExamView)
@@ -3046,6 +3010,11 @@ export default function ExamBuilder({
   // lần Lưu/Xuất bản tới sẽ tạo bản ghi mới như trước giờ.
   const [currentExamId, setCurrentExamId] = useState<string | null>(null);
 
+  // THÊM MỚI (Phần 1 - HANDOFF-PHAN3-LIVEQUIZ.md): banner rẽ nhánh
+  // "Tạo đề / Trình chiếu trực tiếp" — bật đúng 1 lần ngay khi vừa biên
+  // dịch xong 1 đề (xem processExamText), tự đóng khi bấm 1 trong 2 lựa
+  // chọn hoặc bấm ✕. Không chặn thao tác nào khác (không phải modal) —
+  // GV vẫn dùng "Xem đề"/"Cài đặt" bình thường dù banner còn đang hiện.
   const router = useRouter();
 
 
@@ -3142,16 +3111,6 @@ export default function ExamBuilder({
   // "Chia sẻ vào kho chung" — chỉ cần 1 boolean vì popup tự gọi API lấy
   // trạng thái chia sẻ hiện tại của currentExamId, không cần state nào khác.
   const [showShareToLibraryModal, setShowShareToLibraryModal] = useState(false);
-  // THÊM MỚI (khiếu nại: "app có API xuất Word nhưng Cài đặt chỉ có xuất
-  // PDF"): backend đã có sẵn GET /api/exams/[id]/export-docx (dùng
-  // pandoc-wasm dựng file .docx THẬT, công thức Toán sửa được, không phải
-  // ảnh chụp) nhưng KHÔNG có nút nào ở giao diện gọi tới — giáo viên không
-  // có cách nào bấm ra được. isExportingDocx ghi nhớ ĐANG tải bản nào ('de' =
-  // đề riêng không lời giải, 'loigiai' = đề + lời giải) để hiện đúng spinner
-  // trên đúng nút, docxExportError hiện lỗi ngay dưới nhóm nút nếu tải lỗi
-  // (ví dụ đề chưa lưu, hoặc pandoc lỗi công thức/hình).
-  const [isExportingDocx, setIsExportingDocx] = useState<'de' | 'loigiai' | null>(null);
-  const [docxExportError, setDocxExportError] = useState('');
 
   // Ảnh SVG trả về từ Hugging Face cho từng hình TikZ, khoá theo id
   // ([[HÌNH_TIKZ_n]]). Và tiến độ biên dịch để hiển thị thanh trạng thái.
@@ -4848,50 +4807,6 @@ export default function ExamBuilder({
       alert('❌ Xuất bản thất bại! Hãy kiểm tra lại kết nối MongoDB (Console > F12 xem chi tiết lỗi).');
     } finally {
       setIsPublishing(false);
-    }
-  };
-
-  // THÊM MỚI (khiếu nại: "có API xuất Word nhưng Cài đặt chỉ có xuất PDF"):
-  // gọi GET /api/exams/[id]/export-docx, nhận về file .docx (Blob) rồi tự
-  // tạo link tải xuống — giống cách trình duyệt tải file bình thường, không
-  // cần mở tab mới. Cần currentExamId (đề phải được LƯU vào MongoDB trước,
-  // vì file Word dựng từ raw_data đã lưu trên server, không dựng từ state
-  // đang soạn dở trên trình duyệt) — nếu chưa lưu, báo rõ để GV bấm "Lưu đề
-  // thi" ở nhóm bên trên trước.
-  const exportExamDocx = async (withSolutions: boolean) => {
-    setDocxExportError('');
-    if (!currentExamId) {
-      setDocxExportError('⚠️ Hãy bấm "Lưu đề thi" ở trên trước, sau đó mới xuất được file Word (file Word dựng từ đề đã lưu trên máy chủ).');
-      return;
-    }
-    const kind: 'de' | 'loigiai' = withSolutions ? 'loigiai' : 'de';
-    setIsExportingDocx(kind);
-    try {
-      const res = await fetch(`/api/exams/${currentExamId}/export-docx?withSolutions=${withSolutions ? '1' : '0'}`);
-      if (!res.ok) {
-        const result = await res.json().catch(() => null);
-        throw new Error(result?.error || 'Xuất file Word thất bại.');
-      }
-      const blob = await res.blob();
-      // Lấy tên file gợi ý từ header Content-Disposition do server đặt sẵn
-      // (đã gồm tên đề + "_De"/"_LoiGiai" + ngày) — fallback tên chung nếu
-      // vì lý do gì đó không đọc được header (ví dụ trình duyệt chặn).
-      const disposition = res.headers.get('Content-Disposition') || '';
-      const match = disposition.match(/filename="?([^"]+)"?/);
-      const filename = match ? match[1] : `${examTitle || 'De_thi'}_${withSolutions ? 'LoiGiai' : 'De'}.docx`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Lỗi xuất Word:', err);
-      setDocxExportError(`❌ ${err instanceof Error ? err.message : 'Xuất file Word thất bại.'}`);
-    } finally {
-      setIsExportingDocx(null);
     }
   };
 
@@ -6923,7 +6838,7 @@ export default function ExamBuilder({
                                     {new Date(exam.created_at).toLocaleString('vi-VN')}
                                   </p>
                                 </div>
-                                <div className="flex items-center gap-2 flex-shrink-0">
+                                <div className="flex items-center gap-2 flex-wrap min-w-0 max-w-full">
                                   <select
                                     value={exam.folder || ''}
                                     disabled={updatingExamId === exam._id}

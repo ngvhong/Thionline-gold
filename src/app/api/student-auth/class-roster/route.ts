@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     await connectToDatabase();
 
-    const cls = await ClassModel.findOne({ inviteCode: inviteCode.trim() }).select('name').lean();
+    const cls = await ClassModel.findOne({ inviteCode: inviteCode.trim().toUpperCase() }).select('name').lean();
     if (!cls) {
       return NextResponse.json({ error: 'Không tìm thấy lớp với mã này.' }, { status: 404 });
     }

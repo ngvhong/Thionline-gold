@@ -6,6 +6,7 @@ import { StudentModel } from '@/lib/studentModel';
 import { SubmissionModel } from '@/lib/submissionModel';
 import { getVerifiedTeacherIdFromRequest } from '@/lib/auth';
 import { deleteSubmissionBlobs } from '@/lib/blobCleanup';
+import { ensureInviteCode } from '@/lib/classInviteCode';
 
 // Dùng chung ở cả GET/PUT/DELETE: tìm lớp theo id VÀ ownerId cùng lúc — nếu
 // lớp tồn tại nhưng thuộc GV khác, kết quả vẫn là null giống như không tồn
@@ -36,13 +37,16 @@ export async function GET(
 
     const students = await StudentModel.find({ classId: cls._id }).sort({ name: 1 }).lean();
 
+    // Bù mã lớp cho lớp cũ chưa có mã.
+    const inviteCode = cls.inviteCode || (await ensureInviteCode(cls._id));
+
     return NextResponse.json(
       {
         class: {
           _id: cls._id.toString(),
           name: cls.name,
           schoolYear: cls.schoolYear,
-          inviteCode: cls.inviteCode || null,
+          inviteCode: inviteCode || null,
           selfRegisterMode: cls.selfRegisterMode || 'off',
           created_at: cls.created_at,
           // THÊM MỚI (tính năng "Khối", Phần 3a) — xem ghi chú ở GET /api/classes.

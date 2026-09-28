@@ -883,30 +883,13 @@ export default function StudentTakeExam({
         </div>
       )}
 
-      {/* THÊM MỚI (mục 1): mục lục cuộn nhanh — bấm sẽ CUỘN tới phần tương
-          ứng, KHÔNG ẩn/hiện nội dung như tab cũ. Tất cả các phần vẫn nằm
-          liên tiếp trên cùng một trang, cuộn xuống là thấy hết. */}
-      <div className="flex gap-2 mb-5 bg-white border border-gray-200 rounded-xl p-1.5 shadow-sm flex-wrap">
-        {(['p1', 'p2', 'p3', 'p4'] as Partition[]).map((p) =>
-          partitionCount[p] === 0 ? null : (
-            <a
-              key={p}
-              href={`#section-${p}`}
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById(`section-${p}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-              className="flex-1 text-center text-sm font-medium px-3 py-2 rounded-lg transition text-gray-600 hover:bg-gray-50 hover:text-blue-600 active:bg-gray-100 active:scale-95 cursor-pointer min-w-[45%] sm:min-w-0"
-            >
-              {partitionLabel[p]} ({partitionCount[p]})
-            </a>
-          )
-        )}
-      </div>
+      {/* SỬA (khiếu nại điện thoại): bỏ khối thống kê "Phần I: Trắc nghiệm (12),
+          Phần II ..." ở đầu bài — số câu từng phần giờ hiện ngay trong tiêu đề
+          từng phần bên dưới. */}
 
       {partitionCount.p1 > 0 && (
         <div id="section-p1" className="space-y-4 scroll-mt-28">
-          <h2 className="font-bold text-slate-800 text-[15px] px-4 py-2.5 bg-slate-200 border border-slate-300 rounded-lg">{partitionLabel.p1}</h2>
+          <h2 className="font-bold text-slate-800 text-[15px] px-4 py-2.5 bg-slate-200 border border-slate-300 rounded-lg">{partitionLabel.p1} ({partitionCount.p1})</h2>
           {(data.phan_1_TracNghiem || []).map((q: any, i: number) => (
             <div key={q.id} id={`qcard-p1-${q.id}`} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm scroll-mt-28">
               <div className="flex justify-end -mt-4 -mr-4 mb-0.5">
@@ -957,7 +940,7 @@ export default function StudentTakeExam({
       {partitionCount.p2 > 0 && (
         <div id="section-p2" className="space-y-4 mt-8 scroll-mt-28">
           <h2 className="font-bold text-slate-800 text-[15px] px-4 py-2.5 bg-slate-200 border border-slate-300 rounded-lg">
-            {partitionLabel.p2} <span className="font-normal text-slate-500 text-[12px]">(Đ = Đúng, S = Sai)</span>
+            {partitionLabel.p2} ({partitionCount.p2}) <span className="font-normal text-slate-500 text-[12px]">(Đ = Đúng, S = Sai)</span>
           </h2>
           {(data.phan_2_DungSai || []).map((q: any, i: number) => (
             <div key={q.id} id={`qcard-p2-${q.id}`} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm scroll-mt-28">
@@ -1060,7 +1043,7 @@ export default function StudentTakeExam({
 
       {partitionCount.p3 > 0 && (
         <div id="section-p3" className="space-y-4 mt-8 scroll-mt-28">
-          <h2 className="font-bold text-slate-800 text-[15px] px-4 py-2.5 bg-slate-200 border border-slate-300 rounded-lg">{partitionLabel.p3}</h2>
+          <h2 className="font-bold text-slate-800 text-[15px] px-4 py-2.5 bg-slate-200 border border-slate-300 rounded-lg">{partitionLabel.p3} ({partitionCount.p3})</h2>
           {(data.phan_3_TraLoiNgan || []).map((q: any, i: number) => (
             <div key={q.id} id={`qcard-p3-${q.id}`} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm scroll-mt-28">
               <div className="flex justify-end -mt-4 -mr-4 mb-0.5">
@@ -1092,7 +1075,7 @@ export default function StudentTakeExam({
 
       {partitionCount.p4 > 0 && (
         <div id="section-p4" className="space-y-4 mt-8 scroll-mt-28">
-          <h2 className="font-bold text-slate-800 text-[15px] px-4 py-2.5 bg-slate-200 border border-slate-300 rounded-lg">{partitionLabel.p4}</h2>
+          <h2 className="font-bold text-slate-800 text-[15px] px-4 py-2.5 bg-slate-200 border border-slate-300 rounded-lg">{partitionLabel.p4} ({partitionCount.p4})</h2>
           <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-lg px-3 py-2">
             Làm bài trên giấy, chụp ảnh hoặc chọn ảnh đã chụp cho từng câu. Giáo viên sẽ chấm tay
             phần này sau khi em nộp bài — điểm hiển thị lúc nộp KHÔNG bao gồm Phần IV.

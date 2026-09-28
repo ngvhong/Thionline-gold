@@ -181,18 +181,18 @@ export default function LibraryAdminSection() {
           ) : (
             <ul className="divide-y divide-gray-100">
               {rows.map((f) => (
-                <li key={f._id} className="p-3 flex items-center gap-2" style={{ paddingLeft: 12 + f.depth * 20 }}>
+                <li key={f._id} className="p-3 flex flex-wrap items-center gap-2" style={{ paddingLeft: 12 + f.depth * 20 }}>
                   {editingId === f._id ? (
                     <>
                       <input
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
-                        className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                        className="flex-1 min-w-[8rem] border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
                       />
                       <select
                         value={editParentId}
                         onChange={(e) => setEditParentId(e.target.value)}
-                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                        className="min-w-0 max-w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
                       >
                         <option value="">— Nhánh gốc —</option>
                         {rows

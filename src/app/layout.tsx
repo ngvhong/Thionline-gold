@@ -35,7 +35,7 @@ const SLOGAN = 'Hệ thống thi trực tuyến';
 const BANNER_PATH = '/opengraph-image.png';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://thionline-opal.vercel.app'),
+  metadataBase: new URL('https://thionline-ap.vercel.app'),
   title: APP_NAME,
   description: `${APP_NAME} — ${SLOGAN}`,
   icons: {

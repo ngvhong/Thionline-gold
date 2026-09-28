@@ -3,6 +3,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import { ClassModel } from '@/lib/classModel';
 import { StudentModel } from '@/lib/studentModel';
 import { getVerifiedTeacherIdFromRequest } from '@/lib/auth';
+import { generateUniqueInviteCode, ensureInviteCode } from '@/lib/classInviteCode';
 
 // GET /api/classes — danh sách lớp của GV đang đăng nhập, kèm sĩ số mỗi lớp
 // (đếm từ collection students, KHÔNG lưu cứng field studentCount trong Class
@@ -19,6 +20,11 @@ export async function GET(request: NextRequest) {
     const classes = await ClassModel.find({ ownerId: teacherId })
       .sort({ created_at: -1 })
       .lean();
+
+    // Bù mã lớp cho lớp cũ chưa có mã (chỉ chạy với lớp thiếu mã).
+    for (const c of classes as any[]) {
+      if (!c.inviteCode) c.inviteCode = await ensureInviteCode(c._id);
+    }
 
     const classIds = classes.map((c: any) => c._id);
     // Đếm sĩ số theo từng lớp trong 1 lần query duy nhất (aggregate group by
@@ -77,6 +83,7 @@ export async function POST(request: NextRequest) {
       name: String(name).trim(),
       schoolYear: String(schoolYear).trim(),
       ownerId: teacherId,
+      inviteCode: await generateUniqueInviteCode(),
     });
 
     return NextResponse.json(
