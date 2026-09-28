@@ -359,3 +359,67 @@ export function applyTikzCropToRawData<T>(rawData: T): T {
   return { ...data, tikz_list: croppedList } as T;
 }
 
+// =====================================================================
+// "Mồi" lại nội dung SVG từ url (Vercel Blob) cho những hình TikZ chỉ có
+// {id, code, url} — kể từ khi ExamBuilder.tsx đổi sang tải SVG lên Blob
+// thay vì nhúng thẳng chuỗi SVG vào raw_data lúc Lưu/Xuất bản (xem
+// uploadTikzSvgsForSave() trong ExamBuilder.tsx — mục đích giảm dung lượng
+// body request, tránh lỗi 413 khi đề có nhiều hình).
+//
+// Bản xuất Word/PDF (examDocxExport.ts, dùng @resvg/resvg-js rasterize
+// THẲNG chuỗi SVG) cần NỘI DUNG SVG thật, không dùng được url suông — nên
+// phải tải về đây TRƯỚC khi build. CHỈ áp dụng phía server (gọi từ route
+// export-docx/export-pdf), KHÔNG ảnh hưởng phía trình duyệt lúc xem trước
+// (buildTikzSvgMap trong examRender.tsx tự xử lý url riêng để hiện thẳng
+// <img src={url}>, không cần tải nội dung về).
+//
+// Đề CŨ (lưu trước khi có thay đổi này) vẫn có sẵn field `svg` -> giữ
+// nguyên, không tải lại (tương thích ngược 100%). Hình nào tải lỗi (Blob bị
+// xoá, mạng lỗi, timeout...) thì giữ nguyên item gốc (svg vẫn rỗng) — nơi
+// gọi (ImageCollector.resolve trong examDocxExport.ts) đã tự xử lý hình
+// thiếu bằng 1 dòng chú thích thay vì làm hỏng cả file xuất.
+// THÊM MỚI (khiếu nại: "hình TikZ code phức tạp thường không tải lên được,
+// quá nặng dù đã nén"): kể từ khi /api/upload-tikz-svg có phương án cuối
+// rasterize sang PNG (xem rasterizeTikzSvgToPng) cho hình quá nặng để giữ
+// dạng vector, url lưu lại có thể là ẢNH PNG chứ không còn chắc là SVG nữa
+// — hydrateTikzSvgFromUrls TRƯỚC ĐÂY luôn gọi res.text() rồi tìm "<svg",
+// với PNG (dữ liệu nhị phân) chắc chắn không khớp -> ÂM THẦM coi như "tải
+// lỗi", bỏ qua, khiến hình biến mất khỏi Word/PDF (hiện dòng "Không tìm
+// thấy hình") dù url vẫn tồn tại và hợp lệ. SỬA: nhận diện qua đuôi url
+// (.png, do route upload luôn đặt đúng đuôi theo định dạng thật đã lưu) để
+// tải đúng cách (arrayBuffer, không phải text) và lưu vào field riêng
+// `imagePngBuffer` — KHÔNG serialize sang JSON (chỉ dùng trong nội bộ 1
+// request export-docx/export-pdf, không lưu DB) nên giữ nguyên dạng Buffer
+// cho gọn, examDocxExport.ts đọc field này TRỰC TIẾP, không cần rasterize
+// lại lần nữa.
+export async function hydrateTikzSvgFromUrls<T>(rawData: T): Promise<T> {
+  if (!rawData || typeof rawData !== 'object') return rawData;
+  const data = rawData as Record<string, unknown>;
+  if (!Array.isArray(data.tikz_list)) return rawData;
+  const list = data.tikz_list as Array<Record<string, unknown>>;
+  const hydrated = await Promise.all(
+    list.map(async (item) => {
+      if (!item || typeof item !== 'object') return item;
+      const hasSvg = typeof item.svg === 'string' && (item.svg as string).trim().length > 0;
+      const url = typeof item.url === 'string' ? (item.url as string) : '';
+      if (hasSvg || !url) return item;
+      const isPngUrl = /\.png(\?|$)/i.test(url);
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return item;
+        if (isPngUrl) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          if (!buf.length) return item;
+          return { ...item, imagePngBuffer: buf };
+        }
+        const svg = await res.text();
+        if (!svg || !svg.includes('<svg')) return item;
+        return { ...item, svg };
+      } catch (err) {
+        console.error(`Lỗi tải hình TikZ từ url (xuất Word/PDF), hình "${String(item.id)}":`, err);
+        return item;
+      }
+    })
+  );
+  return { ...data, tikz_list: hydrated } as T;
+}
