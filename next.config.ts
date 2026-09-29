@@ -25,7 +25,6 @@ const nextConfig: NextConfig = {
   // Node.js tự require() bình thường lúc chạy (lúc đó mới tìm đúng file
   // đã cài trong node_modules, kể cả file .node theo OS lẫn patch.json).
   serverExternalPackages: ["@resvg/resvg-js", "svgo"],
-};
   output: "standalone",
   experimental: {
     cpus: 1,
@@ -33,4 +32,5 @@ const nextConfig: NextConfig = {
     parallelServerCompiles: false,
     parallelServerBuildTraces: false,
   },
+};
 export default nextConfig;
