@@ -45,6 +45,23 @@ export function normalizePhone(phone: string): string {
   return String(phone).replace(/[\s.-]/g, '').trim();
 }
 
+// THÊM MỚI: kiểm tra số điện thoại VN hợp lệ SAU khi đã normalizePhone().
+// Trước đây route đăng ký chỉ kiểm tra "có nhập gì đó", nên nhập 20 số
+// ngẫu nhiên hay chữ cái đều qua được — vì số điện thoại là định danh duy
+// nhất của học sinh (dùng để đăng nhập, để "đăng ký lại" khi quên PIN),
+// cần chặn từ lúc đăng ký chứ không thể sửa sau.
+//
+// Chấp nhận 2 dạng phổ biến ở VN:
+//   - Bắt đầu bằng 0, tổng 10 số (vd. 0912345678)
+//   - Bắt đầu bằng +84 hoặc 84, theo sau là 9 số (vd. +84912345678)
+// Không xác minh số này CÓ THẬT hay không (không gửi OTP) — chỉ chặn
+// chuỗi rõ ràng không phải số điện thoại.
+const VN_PHONE_REGEX = /^(0\d{9}|(\+?84)\d{9})$/;
+
+export function isValidVietnamPhone(normalizedPhone: string): boolean {
+  return VN_PHONE_REGEX.test(normalizedPhone);
+}
+
 export function signStudentSessionToken(studentAccountId: string, sessionVersion: number): string {
   const payload = { studentAccountId, sessionVersion };
   return jwt.sign(payload, JWT_SECRET, { expiresIn: `${SESSION_DAYS}d` });
