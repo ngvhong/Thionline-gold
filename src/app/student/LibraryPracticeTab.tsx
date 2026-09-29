@@ -351,6 +351,22 @@ export default function LibraryPracticeTab({
 
   const children = folders.filter((f) => f.parentId === currentParentId);
 
+  // SỬA: `f.examCount` từ API chỉ đếm đề gắn TRỰC TIẾP vào đúng thư mục đó
+  // (xem src/app/api/library/tree/route.ts) — thư mục cha kiểu "Lớp 12" mà
+  // đề chỉ nằm trong các thư mục con (vd. "Lớp 12 > Học kỳ 1") thì
+  // f.examCount = 0 nên trước đây KHÔNG hiện số, dù thực tế có đề bên
+  // trong. Cộng dồn đệ quy từ mọi thư mục con (mọi cấp) để hiện tổng số đề
+  // thật sự nằm trong nhánh đó — chỉ tính trên `folders` đã có sẵn trong
+  // state (không gọi thêm API), nên rẻ và không cần sửa route.ts.
+  function totalExamCountOf(folderId: string): number {
+    const self = folders.find((f) => f._id === folderId);
+    let total = self?.examCount || 0;
+    for (const child of folders.filter((f) => f.parentId === folderId)) {
+      total += totalExamCountOf(child._id);
+    }
+    return total;
+  }
+
   return (
     <div>
       {!isLoggedIn && (
@@ -397,7 +413,12 @@ export default function LibraryPracticeTab({
                     >
                       <LibraryFolderIcon className="w-4 h-4 shrink-0 text-gray-400" />
                       <span className="flex-1">{f.name}</span>
-                      {f.examCount > 0 && <span className="text-xs text-gray-400">{f.examCount} đề</span>}
+                      {(() => {
+                        const total = totalExamCountOf(f._id);
+                        return total > 0 ? (
+                          <span className="text-xs text-gray-400">{total} đề</span>
+                        ) : null;
+                      })()}
                     </button>
                   </li>
                 ))}

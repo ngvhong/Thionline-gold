@@ -508,7 +508,7 @@ export default function StudentApp() {
             clearPortalChoice();
             router.push('/login');
           }}
-          className="text-sm font-semibold text-gray-600 hover:text-gray-900 underline underline-offset-2 mt-5"
+          className="text-xs font-medium text-gray-500 hover:text-gray-900 underline underline-offset-2 mt-5"
         >
           Không phải bạn? Đổi vai trò
         </button>
