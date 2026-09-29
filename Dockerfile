@@ -6,7 +6,9 @@ RUN npm ci --no-audit --no-fund
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 ENV NODE_OPTIONS=--max-old-space-size=1536 \
-    NEXT_TELEMETRY_DISABLED=1
+    NEXT_TELEMETRY_DISABLED=1 \
+    MONGODB_URI=mongodb://build-placeholder/x \
+    JWT_SECRET=build-placeholder-secret
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
