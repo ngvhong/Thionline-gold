@@ -26,5 +26,11 @@ const nextConfig: NextConfig = {
   // đã cài trong node_modules, kể cả file .node theo OS lẫn patch.json).
   serverExternalPackages: ["@resvg/resvg-js", "svgo"],
 };
-
+  output: "standalone",
+  experimental: {
+    cpus: 1,
+    webpackMemoryOptimizations: true,
+    parallelServerCompiles: false,
+    parallelServerBuildTraces: false,
+  },
 export default nextConfig;
