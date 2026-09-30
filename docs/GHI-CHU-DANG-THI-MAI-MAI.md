@@ -37,3 +37,11 @@ GV chủ động bỏ heartbeat vì tốn tải Mongo. Đã thêm ở tab Quản
   Chỉ đếm lượt có `studentId` (học sinh trong lớp). Lượt "Ôn luyện" không có `studentId` hiện CHƯA được tự chốt quá giờ — còn tồn.
 - Còn tồn: UI đọc `expiringSoonCount`/`expiredFreeCount` nhưng `api/admin/stats` trong bản này không trả hai trường đó.
 - KHÔNG thêm heartbeat/ghi theo request vào vùng này nếu chưa được GV đồng ý.
+
+## 4. Lỗi "Vào thêm lớp" báo thành công nhưng không vào lớp (đã sửa)
+`JoinClassForm` (src/app/student/StudentApp.tsx) KHÔNG tự gọi API, chỉ trả `{inviteCode, studentId}` qua `onJoined`.
+Hộp thoại "+ Vào thêm lớp" trong `StudentHome` trước đây bỏ qua tham số đó, chỉ đóng hộp thoại và alert
+"Đã vào lớp thành công" -> KHÔNG gọi `/api/student-auth/join-class` -> `Student.studentAccountId` không được gắn ->
+tab "Đề được giao" luôn trống. Nay gọi API thật, báo lỗi nếu thất bại, rồi ép `AssignedExamsTab` tải lại (key).
+Luồng đăng ký mới (`handleJoinAfterRegister`) vốn đã đúng.
+Dữ liệu cũ: học sinh đã bấm "Vào thêm lớp" trước bản sửa chưa được gắn lớp, phải vào lớp lại.

@@ -330,6 +330,10 @@ function StudentHome({
   onAutoStartConsumed?: () => void;
 }) {
   const [tab, setTab] = useState<'assigned' | 'library'>(initialTab || 'assigned');
+  // SỬA (HS báo: vào lớp xong, tab "Đề được giao" vẫn trống): AssignedExamsTab chỉ
+  // tải danh sách 1 lần lúc mount, nên sau "Vào thêm lớp" nó vẫn giữ danh sách
+  // cũ (rỗng) tới khi F5. Tăng key này để ép tab tải lại ngay sau khi vào lớp.
+  const [assignedReloadKey, setAssignedReloadKey] = useState(0);
   const [showJoinModal, setShowJoinModal] = useState(false);
 
   async function handleLogout() {
@@ -378,7 +382,7 @@ function StudentHome({
       </div>
 
       {tab === 'assigned' ? (
-        <AssignedExamsTab />
+        <AssignedExamsTab key={assignedReloadKey} />
       ) : (
         <LibraryPracticeTab
           isLoggedIn={true}
@@ -405,8 +409,25 @@ function StudentHome({
           <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-6">
             <p className="font-semibold text-gray-800 mb-3">Vào thêm lớp</p>
             <JoinClassForm
-              onJoined={() => {
+              onJoined={async (info) => {
+                // SỬA LỖI THẬT (HS báo "đã vào lớp" nhưng không thấy đề): JoinClassForm
+                // KHÔNG tự gọi API, chỉ trả mã lớp + tên đã chọn qua onJoined. Nhánh
+                // này trước đây BỎ QUA `info`, chỉ đóng hộp thoại và alert "thành
+                // công" mà KHÔNG hề gọi /api/student-auth/join-class -> tài khoản
+                // không bao giờ được gắn vào dòng tên trong lớp. (Luồng đăng ký mới
+                // — handleJoinAfterRegister — thì có gọi API nên không bị.)
+                try {
+                  await apiFetch('/api/student-auth/join-class', {
+                    method: 'POST',
+                    body: JSON.stringify(info),
+                  });
+                } catch (err: any) {
+                  alert(err.message || 'Không vào lớp được, vui lòng thử lại.');
+                  return;
+                }
                 setShowJoinModal(false);
+                setAssignedReloadKey((k) => k + 1); // tải lại danh sách đề ngay
+                setTab('assigned');
                 alert('Đã vào lớp thành công.');
               }}
               onSkip={() => setShowJoinModal(false)}
