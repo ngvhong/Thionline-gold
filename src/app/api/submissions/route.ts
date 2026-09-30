@@ -6,6 +6,7 @@ import { StudentModel } from '@/lib/studentModel';
 import { SubmissionModel } from '@/lib/submissionModel';
 import { Exam } from '@/lib/examModel';
 import { getVerifiedTeacherIdFromRequest } from '@/lib/auth';
+import { expireOverdueSubmissions } from '@/lib/expireOverdueSubmissions';
 
 // GET /api/submissions?studentId=...
 //   → toàn bộ đề đã giao cho 1 học sinh, MỖI ĐỀ 1 DÒNG (lần làm mới nhất) —
@@ -50,6 +51,8 @@ export async function GET(request: NextRequest) {
       // Mỗi đề chỉ lấy lần làm (attempt) MỚI NHẤT làm kết quả "chính thức" —
       // đúng quy ước đã ghi sẵn trong submissionModel.ts, để sau này nút "Cho
       // làm lại" (Bước 3) không làm trùng dòng hiển thị ở đây.
+      // SỬA ("đang thi mãi mãi"): chốt lượt quá giờ không nộp trước khi đọc.
+      await expireOverdueSubmissions([studentId]);
       const latestPerExam = await SubmissionModel.aggregate([
         { $match: { studentId: new mongoose.Types.ObjectId(studentId) } },
         { $sort: { attemptNumber: -1 } },
@@ -100,6 +103,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Không tìm thấy học sinh này.' }, { status: 404 });
       }
 
+      await expireOverdueSubmissions([studentId]); // SỬA ("đang thi mãi mãi")
       const attempts = await SubmissionModel.find({ studentId, examId })
         .sort({ attemptNumber: -1 })
         .lean();
@@ -147,6 +151,7 @@ export async function GET(request: NextRequest) {
       // hoạt động gần nhất (started_at nếu có, không thì assigned_at) rồi
       // chỉ lấy 1 dòng mới nhất/em, đúng ý "trạng thái đang hiện lên người
       // này bây giờ ra sao", không cộng dồn theo đề.
+      await expireOverdueSubmissions(studentIds); // SỬA ("đang thi mãi mãi")
       const latestPerStudent = await SubmissionModel.aggregate([
         { $match: { studentId: { $in: studentIds } } },
         {
@@ -182,6 +187,7 @@ export async function GET(request: NextRequest) {
       const students = await StudentModel.find({ classId }, { _id: 1 }).lean();
       const studentIds = students.map((s: any) => s._id);
 
+      await expireOverdueSubmissions(studentIds); // SỬA ("đang thi mãi mãi")
       const latestPerStudent = await SubmissionModel.aggregate([
         { $match: { examId: new mongoose.Types.ObjectId(examId), studentId: { $in: studentIds } } },
         { $sort: { attemptNumber: -1 } },

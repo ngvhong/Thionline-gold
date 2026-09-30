@@ -30,6 +30,12 @@ const TeacherSchema = new mongoose.Schema({
 
   created_at: { type: Date, default: Date.now },
 
+  // THÊM MỚI (thống kê admin "GV hoạt động 7 ngày"): thời điểm ĐĂNG NHẬP gần
+  // nhất — chỉ ghi 1 lần/lần đăng nhập (route auth/login), KHÔNG ghi theo
+  // từng request để không tốn tải Mongo. Lưu ý: phiên đăng nhập sống lâu
+  // (cookie), người đang dùng nhưng chưa đăng nhập lại sẽ không được cập nhật.
+  lastLoginAt: { type: Date, default: null },
+
   // THÊM MỚI (phương án dự phòng khi tài khoản bị chiếm): tăng số này lên
   // là MỌI cookie phiên đăng nhập cũ (kể cả của kẻ đã chiếm được tài khoản)
   // lập tức mất hiệu lực, không cần đợi hết hạn 30 ngày — xem

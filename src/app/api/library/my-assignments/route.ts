@@ -8,6 +8,7 @@ import { SubmissionModel } from '@/lib/submissionModel';
 import { Exam } from '@/lib/examModel';
 import { ExamAssignmentModel } from '@/lib/examAssignmentModel';
 import { getVerifiedStudentAccountIdFromRequest } from '@/lib/studentAuth';
+import { expireOverdueSubmissions } from '@/lib/expireOverdueSubmissions';
 import { resolveEffectiveSettings, canSelfRetake } from '@/lib/examAccessRules';
 
 // THÊM MỚI (Giai đoạn 2 — tab "Đề được giao", xem
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest) {
 
     // Lần làm MỚI NHẤT của mỗi cặp (studentId, examId) — đúng quy ước đã ghi
     // trong submissionModel.ts (attemptNumber lớn nhất = kết quả chính thức).
+    await expireOverdueSubmissions(studentObjectIds); // SỬA ("đang thi mãi mãi")
     const latestPerExam = await SubmissionModel.aggregate([
       { $match: { studentId: { $in: studentObjectIds } } },
       { $sort: { attemptNumber: -1 } },

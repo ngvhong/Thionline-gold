@@ -5,6 +5,8 @@ import { ClassModel } from '@/lib/classModel';
 import { Exam } from '@/lib/examModel';
 import { SubmissionModel } from '@/lib/submissionModel';
 import { requireAdmin } from '@/lib/adminGuard';
+import { StudentAccountModel } from '@/lib/studentAccountModel';
+import { expireOverdueSubmissions } from '@/lib/expireOverdueSubmissions';
 
 // GET /api/admin/stats — thống kê tổng quan TOÀN HỆ THỐNG cho thẻ số liệu ở
 // đầu tab Quản trị (tổng GV, lớp, đề thi, bài nộp...). Chỉ admin gọi được,
@@ -23,6 +25,15 @@ export async function GET(request: NextRequest) {
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
+    // THÊM MỚI: "HS đang thi" toàn hệ thống. Trước khi đếm, chốt các lượt đã quá
+    // giờ mà không nộp (cùng cơ chế trang chủ GV, xem expireOverdueSubmissions.ts)
+    // để con số không bị kẹt. Chỉ tính lượt gắn với 1 học sinh trong lớp
+    // (studentId có giá trị) — lượt "Ôn luyện" không có studentId chưa được
+    // tự chốt nên không đưa vào đây để khỏi đếm sai.
+    const liveFilter = { status: 'đang thi', studentId: { $exists: true, $ne: null } };
+    const liveStudentIds = await SubmissionModel.distinct('studentId', liveFilter);
+    await expireOverdueSubmissions(liveStudentIds);
+
     const [
       teacherCount,
       suspendedCount,
@@ -32,6 +43,10 @@ export async function GET(request: NextRequest) {
       examCount,
       publishedExamCount,
       submissionCount,
+      liveExamCount,
+      studentAccountCount,
+      activeTeachers7d,
+      activeStudents7d,
     ] = await Promise.all([
       TeacherModel.countDocuments(),
       TeacherModel.countDocuments({ status: 'suspended' }),
@@ -44,6 +59,10 @@ export async function GET(request: NextRequest) {
       Exam.countDocuments(),
       Exam.countDocuments({ is_published: true }),
       SubmissionModel.countDocuments({ status: 'đã nộp' }),
+      SubmissionModel.countDocuments(liveFilter),
+      StudentAccountModel.countDocuments(),
+      TeacherModel.countDocuments({ lastLoginAt: { $gte: sevenDaysAgo } }),
+      StudentAccountModel.countDocuments({ lastLoginAt: { $gte: sevenDaysAgo } }),
     ]);
 
     return NextResponse.json(
@@ -62,6 +81,10 @@ export async function GET(request: NextRequest) {
           examCount,
           publishedExamCount,
           submissionCount,
+          liveExamCount,
+          studentAccountCount,
+          activeTeachers7d,
+          activeStudents7d,
         },
       },
       { status: 200 }

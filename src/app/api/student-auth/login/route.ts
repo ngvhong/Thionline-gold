@@ -52,6 +52,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Số điện thoại hoặc mã PIN không đúng.' }, { status: 401 });
     }
 
+    // THÊM MỚI (thống kê admin): ghi thời điểm đăng nhập (1 lệnh ghi nhẹ).
+    await StudentAccountModel.updateOne({ _id: account._id }, { $set: { lastLoginAt: new Date() } }).catch((err: unknown) =>
+      console.error('Lỗi ghi lastLoginAt HS:', err)
+    );
+
     const token = signStudentSessionToken(account._id.toString(), account.sessionVersion || 0);
 
     const response = NextResponse.json(

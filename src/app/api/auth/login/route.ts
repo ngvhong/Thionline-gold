@@ -74,6 +74,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // THÊM MỚI (thống kê admin): ghi thời điểm đăng nhập — 1 lệnh ghi nhẹ/lần
+    // đăng nhập, lỗi ghi không được làm hỏng việc đăng nhập.
+    await TeacherModel.updateOne({ _id: teacher._id }, { $set: { lastLoginAt: new Date() } }).catch((err: unknown) =>
+      console.error('Lỗi ghi lastLoginAt GV:', err)
+    );
+
     const token = signSessionToken(teacher._id.toString(), teacher.sessionVersion || 0);
 
     // THÊM MỚI (phương án dự phòng khi admin bị chiếm tài khoản): báo ngay

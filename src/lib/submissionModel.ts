@@ -103,12 +103,19 @@ const SubmissionSchema = new mongoose.Schema({
   assigned_at: { type: Date, default: Date.now }, // lúc giáo viên giao đề
   started_at: Date, // lúc học sinh mở link bắt đầu làm
   submitted_at: Date, // lúc học sinh nộp bài
+  // THÊM MỚI (sửa lỗi "đang thi mãi mãi"): true khi lượt này do SERVER tự chốt vì
+  // học sinh quá giờ làm bài mà không nộp (xem lib/expireOverdueSubmissions.ts).
+  // Bài tự chốt có 0 điểm, answers rỗng. false/thiếu = học sinh tự nộp thật.
+  autoSubmitted: { type: Boolean, default: false },
 });
 
 // Không đặt unique nữa (vì cho phép nhiều lần làm), nhưng vẫn cần index để
 // truy vấn nhanh "tất cả lần làm của học sinh X với đề Y" và "lần làm mới
 // nhất" (sort theo attemptNumber giảm dần).
 SubmissionSchema.index({ studentId: 1, examId: 1, attemptNumber: -1 });
+// THÊM MỚI: đếm/lọc nhanh các lượt 'đang thi' (thống kê admin, tự chốt bài
+// quá giờ) mà không phải quét cả bảng.
+SubmissionSchema.index({ status: 1 });
 
 export const SubmissionModel =
   mongoose.models.Submission || mongoose.model('Submission', SubmissionSchema);

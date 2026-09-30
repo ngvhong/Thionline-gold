@@ -1759,6 +1759,9 @@ export default function ClassDetailPanel({
   useEffect(() => {
     let cancelled = false;
     async function loadActivityStatus() {
+      // SỬA (giảm tải Active CPU trên Vercel — xem giải thích đầy đủ ở
+      // page.tsx, đoạn loadLive cùng kiểu sửa): bỏ qua khi tab đang ẩn.
+      if (document.hidden) return;
       try {
         const data = await apiFetch<{ assignments: { studentId: string; status: string }[] }>(
           `/api/submissions?classId=${classId}`
@@ -1776,10 +1779,17 @@ export default function ClassDetailPanel({
       }
     }
     loadActivityStatus();
-    const interval = setInterval(loadActivityStatus, 20000);
+    // SỬA: giãn 20s -> 45s, cộng dừng hẳn khi tab ẩn ở trên — cùng lý do đã
+    // giải thích ở page.tsx.
+    const interval = setInterval(loadActivityStatus, 45000);
+    function handleVisibilityChange() {
+      if (!document.hidden) loadActivityStatus();
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       cancelled = true;
       clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [classId]);
 

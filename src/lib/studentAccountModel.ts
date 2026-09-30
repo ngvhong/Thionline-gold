@@ -31,6 +31,10 @@ const StudentAccountSchema = new mongoose.Schema({
   sessionVersion: { type: Number, default: 0 },
 
   created_at: { type: Date, default: Date.now },
+
+  // THÊM MỚI (thống kê admin): thời điểm đăng nhập gần nhất — ghi 1 lần/lần
+  // đăng nhập (student-auth/login), không ghi theo từng request.
+  lastLoginAt: { type: Date, default: null },
 });
 
 export const StudentAccountModel =

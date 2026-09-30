@@ -111,6 +111,11 @@ type AdminStats = {
   // GET /api/admin/stats (Phần 2a).
   expiringSoonCount: number;
   expiredFreeCount: number;
+  // THÊM MỚI: khớp 4 field trả thêm ở GET /api/admin/stats.
+  liveExamCount: number;
+  studentAccountCount: number;
+  activeTeachers7d: number;
+  activeStudents7d: number;
 };
 
 // THÊM MỚI: khớp response của GET/PUT /api/admin/settings — trạng thái cấu
@@ -3686,6 +3691,25 @@ function AdminTab() {
               { label: 'Bài đã nộp', value: stats?.submissionCount, icon: <ChartBarIcon className="w-5 h-5 text-blue-600" /> },
               { label: 'Sắp hết hạn', value: stats?.expiringSoonCount, icon: <ClockIcon className="w-5 h-5 text-amber-600" /> },
               { label: 'Đã hết hạn', value: stats?.expiredFreeCount, icon: <ClockIcon className="w-5 h-5 text-red-500" /> },
+              {
+                label: 'HS đang thi',
+                value: stats?.liveExamCount,
+                sub: 'toàn hệ thống',
+                icon: <CapIcon className="w-5 h-5 text-green-600" />,
+              },
+              { label: 'Tài khoản HS', value: stats?.studentAccountCount, icon: <CapIcon className="w-5 h-5 text-blue-600" /> },
+              {
+                label: 'GV đăng nhập (7 ngày)',
+                value: stats?.activeTeachers7d,
+                sub: 'tính từ lần đăng nhập gần nhất',
+                icon: <UsersIcon className="w-5 h-5 text-emerald-600" />,
+              },
+              {
+                label: 'HS đăng nhập (7 ngày)',
+                value: stats?.activeStudents7d,
+                sub: 'tài khoản HS, tính từ lần đăng nhập',
+                icon: <UsersIcon className="w-5 h-5 text-emerald-600" />,
+              },
             ].map((card) => (
               <div key={card.label} className="bg-white border border-gray-200 rounded-xl px-4 py-3.5">
                 <div className="flex items-center justify-between mb-2">
@@ -4147,6 +4171,12 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
   useEffect(() => {
     let cancelled = false;
     async function loadLive() {
+      // SỬA (giảm tải Active CPU trên Vercel khi có nhiều GV dùng cùng lúc):
+      // không gọi API khi tab đang ẩn (GV chuyển tab khác/thu nhỏ trình
+      // duyệt) — poll nền vô ích vì không ai nhìn thấy kết quả, mà mỗi lượt
+      // gọi vẫn tốn 1 lượt invoke + CPU xử lý ở server dù rất nhẹ. Xem thêm
+      // ClassDetailPanel.tsx (cùng kiểu sửa cho loadActivityStatus).
+      if (document.hidden) return;
       try {
         const data = await apiFetch<{ liveStudents: LiveStudent[] }>('/api/submissions/live');
         if (!cancelled) {
@@ -4161,10 +4191,21 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
       }
     }
     loadLive();
-    const interval = setInterval(loadLive, 20000);
+    // SỬA: giãn 20s -> 45s (tình trạng "đang thi" không cần cập nhật sát
+    // giây, 45s vẫn đủ nhanh để GV thấy kịp thời) — giảm ~55% số lượt gọi
+    // nền so với trước, cộng thêm hiệu quả của việc dừng hẳn khi tab ẩn ở
+    // trên, tổng cộng giảm đáng kể Active CPU khi càng nhiều GV mở tab lâu.
+    const interval = setInterval(loadLive, 45000);
+    // Quay lại tab sau khi ẩn -> làm mới ngay 1 lần cho khớp dữ liệu mới
+    // nhất, thay vì phải chờ tới interval kế tiếp (có thể tới 45s).
+    function handleVisibilityChange() {
+      if (!document.hidden) loadLive();
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       cancelled = true;
       clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -4211,11 +4252,38 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
         ))}
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-2">
+        {/* SỬA (Phần 7): thẻ này trước trỏ sang tab 'classes' ("Quản lý
+            lớp") — tab đó đã bị ẩn khỏi menu điều hướng nên đổi đích đến
+            sang 'khoi' (Khối đã thay thế đủ tính năng: danh sách lớp, học
+            sinh, đề đã giao...), đồng thời đổi nhãn/icon cho khớp mục
+            "Khối" ở menu để GV không bị lạc hướng khi bấm vào từ Trang chủ.
+            Không xoá thẻ này, chỉ đổi đích đến — đúng nguyên tắc của Phần 7. */}
+        <button
+          onClick={() => onGoTo('khoi')}
+          className="bg-white border border-gray-200 rounded-xl p-5 text-left hover:shadow-md hover:border-blue-300 transition-all"
+        >
+          <LayersIcon className="w-7 h-7 text-blue-600 mb-2" />
+          <p className="font-bold text-gray-900">Quản lí Khối-lớp</p>
+          <p className="text-xs text-gray-400 mt-1">Danh sách lớp, học sinh, đề đã giao</p>
+        </button>
+        <button
+          onClick={() => onGoTo('exams')}
+          className="bg-white border border-gray-200 rounded-xl p-5 text-left hover:shadow-md hover:border-blue-300 transition-all"
+        >
+          <FileIcon className="w-6 h-6 mb-2 text-blue-600" />
+          <p className="font-bold text-gray-900">Đề thi</p>
+          <p className="text-xs text-gray-400 mt-1">Tạo đề, soát lỗi, xuất bản lấy link</p>
+        </button>
+      </div>
+      {/* SỬA (GV yêu cầu: "di chuyển tab HS đang thi xuống dưới cùng trong giao diện chính"):
+          khối "Đang thi" TRƯỚC ĐÂY nằm giữa thẻ thống kê và 2 thẻ điều hướng —
+          nay chuyển xuống CUỐI trang chủ (mb-7 đổi thành mt-7 cho khớp). */}
       {/* THÊM MỚI: danh sách "đang thi" — xem ghi chú ở khai báo state
           liveStudents phía trên. Chỉ hiện khối này khi có ít nhất 1 em đang
           thi, tránh chiếm chỗ trang chủ lúc không ai làm bài. */}
       {liveStudents.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-7 overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm mt-7 overflow-hidden">
           <button
             type="button"
             onClick={() => setLiveOpen((v) => !v)}
@@ -4259,33 +4327,9 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
         </div>
       )}
       {liveError && liveStudents.length === 0 && (
-        <p className="text-xs text-red-500 mb-7">{liveError}</p>
+        <p className="text-xs text-red-500 mt-7">{liveError}</p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* SỬA (Phần 7): thẻ này trước trỏ sang tab 'classes' ("Quản lý
-            lớp") — tab đó đã bị ẩn khỏi menu điều hướng nên đổi đích đến
-            sang 'khoi' (Khối đã thay thế đủ tính năng: danh sách lớp, học
-            sinh, đề đã giao...), đồng thời đổi nhãn/icon cho khớp mục
-            "Khối" ở menu để GV không bị lạc hướng khi bấm vào từ Trang chủ.
-            Không xoá thẻ này, chỉ đổi đích đến — đúng nguyên tắc của Phần 7. */}
-        <button
-          onClick={() => onGoTo('khoi')}
-          className="bg-white border border-gray-200 rounded-xl p-5 text-left hover:shadow-md hover:border-blue-300 transition-all"
-        >
-          <LayersIcon className="w-7 h-7 text-blue-600 mb-2" />
-          <p className="font-bold text-gray-900">Quản lí Khối-lớp</p>
-          <p className="text-xs text-gray-400 mt-1">Danh sách lớp, học sinh, đề đã giao</p>
-        </button>
-        <button
-          onClick={() => onGoTo('exams')}
-          className="bg-white border border-gray-200 rounded-xl p-5 text-left hover:shadow-md hover:border-blue-300 transition-all"
-        >
-          <FileIcon className="w-6 h-6 mb-2 text-blue-600" />
-          <p className="font-bold text-gray-900">Đề thi</p>
-          <p className="text-xs text-gray-400 mt-1">Tạo đề, soát lỗi, xuất bản lấy link</p>
-        </button>
-      </div>
     </div>
   );
 }

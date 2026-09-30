@@ -313,12 +313,36 @@ export function cleanTableCell(raw: string): string {
 function splitTopLevel(str: string, delimiter: string): string[] {
   const parts: string[] = [];
   let depth = 0;
+  // SỬA (khiếu nại: bảng "Đà Lạt / Vũng Tàu" bị vỡ, chữ "diện \end{tabular}"
+  // rơi ra thành ô riêng): ô "Giá trị đại\\diện" là 1 BẢNG CON lồng trong
+  // bảng lớn (\begin{tabular}{c} Giá trị đại \\ diện \end{tabular}). Dấu \\
+  // và & nằm BÊN TRONG bảng con đó không phải dấu xuống hàng/sang ô của bảng
+  // lớn, nhưng \begin{tabular}...\end{tabular} không dùng ngoặc nhọn nên đếm
+  // depth theo { } không nhận ra -> bảng lớn bị cắt nhầm thành nhiều hàng lệch
+  // cột. Nay đếm thêm envDepth (độ sâu môi trường array/tabular lồng nhau) và
+  // chỉ tách khi đang ở cấp ngoài cùng của CẢ ngoặc nhọn lẫn môi trường.
+  let envDepth = 0;
   let current = '';
   for (let i = 0; i < str.length; i++) {
     const ch = str[i];
+    if (ch === '\\') {
+      const envM = /^\\(begin|end)\{(?:array|tabular|tabularx)\}/.exec(str.slice(i, i + 24));
+      if (envM) {
+        envDepth += envM[1] === 'begin' ? 1 : -1;
+        if (envDepth < 0) envDepth = 0;
+        current += envM[0];
+        i += envM[0].length - 1;
+        continue;
+      }
+    }
     if (ch === '{') depth++;
     else if (ch === '}') depth--;
-    if (depth <= 0 && str.startsWith(delimiter, i)) {
+    // "\&" là ký tự & thật trong ô (ví dụ "A \& B"), không phải dấu sang ô.
+    if (delimiter === '&' && ch === '&' && i > 0 && str[i - 1] === '\\') {
+      current += ch;
+      continue;
+    }
+    if (depth <= 0 && envDepth === 0 && str.startsWith(delimiter, i)) {
       parts.push(current);
       current = '';
       i += delimiter.length - 1;
@@ -341,7 +365,7 @@ export function parseLatexStatTable(block: string): { text: string; colSpan: num
 
   return rows
     .map((row) => {
-      const rawCells = row.split('&');
+      const rawCells = splitTopLevel(row, '&');
       // BUG ĐÃ SỬA: trước đây lọc bỏ MỌI ô rỗng (`.filter((c) => c.text !== '')`)
       // ngay sau khi map — nhưng ô rỗng có ý nghĩa VỊ TRÍ (ví dụ hàng cuối
       // `& & n=n_1+...+n_m` cố ý để trống 2 ô đầu, nội dung nằm ở cột 3). Lọc

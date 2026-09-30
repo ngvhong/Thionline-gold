@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { StudentModel } from './studentModel';
 import { SubmissionModel } from './submissionModel';
 import { Exam } from './examModel';
+import { expireOverdueSubmissions } from './expireOverdueSubmissions';
 import { computePartScores, computeEssayMax, DEFAULT_SCORING, type PartScores } from './grading';
 
 // THÊM MỚI (mục 4): gom dữ liệu bảng điểm kiểu Azota — 1 lớp có thể được
@@ -140,6 +141,10 @@ export async function buildScoreTable(
   if (studentIds.length === 0) {
     return { className, schoolYear, exams: [], students: [], generatedAt: new Date().toISOString(), scoreMode };
   }
+
+  // SỬA ("đang thi mãi mãi"): chốt lượt quá giờ không nộp để bảng điểm không
+  // hiện "Đang thi" mãi — xem lib/expireOverdueSubmissions.ts.
+  await expireOverdueSubmissions(studentIds);
 
   const matchStage: any = { studentId: { $in: studentIds } };
   if (examIdsFilter && examIdsFilter.length > 0) {

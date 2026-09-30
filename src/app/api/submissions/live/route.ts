@@ -6,6 +6,7 @@ import { StudentModel } from '@/lib/studentModel';
 import { SubmissionModel } from '@/lib/submissionModel';
 import { Exam } from '@/lib/examModel';
 import { getVerifiedTeacherIdFromRequest } from '@/lib/auth';
+import { expireOverdueSubmissions } from '@/lib/expireOverdueSubmissions';
 
 // GET /api/submissions/live
 //   → THÊM MỚI (GV yêu cầu 29-8: "muốn nhìn 1 danh sách biết HS nào đang
@@ -19,9 +20,10 @@ import { getVerifiedTeacherIdFromRequest } from '@/lib/auth';
 // started_at đã ghi + submitted_at còn trống — đây là tín hiệu "đã bắt đầu,
 // chưa nộp", KHÔNG phải tín hiệu "trình duyệt đang thật sự mở/kết nối".
 // Nếu HS tắt tab/mất mạng giữa chừng mà chưa nộp, dòng này vẫn hiện ở đây
-// cho tới khi nộp hoặc hết giờ. Muốn chính xác hơn (biết chắc HS còn đang
-// mở bài) cần thêm cơ chế heartbeat riêng — chưa làm ở bản này theo đúng lựa
-// chọn "làm nhanh, dùng dữ liệu có sẵn" của GV.
+// cho tới khi HẾT GIỜ làm bài (started_at + duration + 5 phút chừa) — sau đó
+// expireOverdueSubmissions tự chốt lượt đó (0 điểm, autoSubmitted) nên dòng
+// biến mất, KHÔNG còn kẹt vĩnh viễn như trước. Muốn biết chắc HS còn đang mở
+// bài trong khoảng giờ đó cần heartbeat riêng — chưa làm.
 export async function GET(request: NextRequest) {
   try {
     const teacherId = await getVerifiedTeacherIdFromRequest(request);
@@ -50,6 +52,11 @@ export async function GET(request: NextRequest) {
     const studentMap = new Map(
       myStudents.map((s: any) => [String(s._id), { name: s.name, classId: String(s.classId) }])
     );
+
+    // SỬA (khiếu nại "đang thi mãi mãi"): tự chốt các lượt đã quá giờ làm bài
+    // (+ thời gian chừa) mà học sinh không nộp, TRƯỚC khi liệt kê — xem
+    // lib/expireOverdueSubmissions.ts.
+    await expireOverdueSubmissions(studentIds);
 
     // Mỗi cặp (studentId, examId) có thể có nhiều attempt — chỉ lần làm MỚI
     // NHẤT mới phản ánh đúng trạng thái hiện tại, giống cách các API khác
