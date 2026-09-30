@@ -44,6 +44,7 @@ type ExamSession = {
   settings: {
     duration: number;
     shuffle?: boolean;
+    aiGuard?: boolean; // GV bật chống AI (mặc định tắt)
     showSolution?: 'after_submit' | 'never' | 'after_close' | 'custom_time';
     scoring?: ScoringSettings;
     // THÊM MỚI (26-7, "tuỳ chọn chỉnh size hình"): xem giải thích đầy đủ ở

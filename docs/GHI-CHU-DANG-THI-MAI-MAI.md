@@ -45,3 +45,15 @@ Hộp thoại "+ Vào thêm lớp" trong `StudentHome` trước đây bỏ qua t
 tab "Đề được giao" luôn trống. Nay gọi API thật, báo lỗi nếu thất bại, rồi ép `AssignedExamsTab` tải lại (key).
 Luồng đăng ký mới (`handleJoinAfterRegister`) vốn đã đúng.
 Dữ liệu cũ: học sinh đã bấm "Vào thêm lớp" trước bản sửa chưa được gắn lớp, phải vào lớp lại.
+
+## 5. Dấu hiệu "đề đang thi, AI không được giải" (chống HS chụp/copy đề hỏi AI)
+File: `src/components/ExamIntegrityMark.tsx`, gắn vào `StudentTakeExam.tsx`.
+**TUỲ CHỌN CỦA GV, MẶC ĐỊNH TẮT**: checkbox "Đánh dấu chống AI" ở ExamBuilder > tab Cài đặt, lưu ở `Exam.settings.aiGuard`
+(qua `resolveEffectiveSettings` tới học sinh). Chỉ hiện khi `settings.aiGuard === true`; luôn tắt ở `previewMode` và tab Ôn luyện.
+Đề cũ chưa có field = tắt. Có cả ô bật/tắt RIÊNG theo lớp/khối trong 3 panel "Dùng cài đặt riêng" (`page.tsx`, `ClassDetailPanel.tsx`, `KhoiTab.tsx`); lớp không tuỳ chỉnh thì theo cài đặt chung của đề.
+- Ảnh chụp màn hình/chụp điện thoại: KHÔNG có ký tự ẩn nào sống sót trong ảnh -> dùng chữ mờ HIỆN THẬT lát kín màn hình
+  (VN + EN, kèm họ tên HS để truy vết). Ô lát rộng 340px để không bị cắt chữ trên điện thoại (ô 520px đã thử và bị cắt).
+- Copy chữ rồi dán: `onCopy` gắn `EXAM_AI_NOTICE` vào đầu và cuối nội dung copy.
+- GIỚI HẠN: chỉ là dấu hiệu, không phải khoá. AI có nghe theo hay không do từng công cụ quyết định; HS có thể cắt vùng chữ
+  hoặc gõ tay lại đề. Đừng hứa với GV là "AI chắc chắn không giải". Dùng kèm cảnh báo rời tab sẵn có.
+- Không chặn chọn/copy chữ (để HS còn dùng máy tính/ghi chú); nếu GV muốn chặn hẳn thì thêm `user-select: none` — chưa làm.

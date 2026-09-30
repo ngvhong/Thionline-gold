@@ -52,6 +52,9 @@ export type ExamAccessSettings = {
   // ExamBuilder, lưu chung trong Exam.settings nên tự động trôi theo đúng
   // luồng resolveEffectiveSettings này, không cần code riêng.
   imageScalePercent?: number;
+  // THÊM MỚI: GV bật "đề đang thi - AI không được giải" (chữ mờ lát màn hình +
+  // lời nhắn khi copy). undefined/false = TẮT (mặc định). Xem ExamIntegrityMark.tsx.
+  aiGuard?: boolean;
 };
 
 export type ExamAssignmentLike = {

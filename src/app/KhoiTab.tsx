@@ -39,6 +39,7 @@ type ShowSolutionMode = 'after_submit' | 'never' | 'after_close' | 'custom_time'
 type AssignSettings = {
   duration: number;
   shuffle: boolean;
+  aiGuard: boolean;
   maxAttempts: number;
   showSolution: ShowSolutionMode;
   solutionOpenAt: string;
@@ -492,6 +493,7 @@ function AssignExamModal({
   const [customSettings, setCustomSettings] = useState<AssignSettings>({
     duration: 45,
     shuffle: false,
+    aiGuard: false,
     maxAttempts: 0,
     showSolution: 'after_submit',
     solutionOpenAt: '',
@@ -552,6 +554,7 @@ function AssignExamModal({
               setCustomSettings({
                 duration: Number(merged.duration) || 45,
                 shuffle: !!merged.shuffle,
+                aiGuard: !!merged.aiGuard,
                 maxAttempts: Number(merged.maxAttempts) || 0,
                 showSolution: merged.showSolution || 'after_submit',
                 solutionOpenAt: isoToDatetimeLocal(merged.solutionOpenAt || null),
@@ -611,6 +614,7 @@ function AssignExamModal({
               ? {
                   duration: Math.max(1, Number(customSettings.duration) || 45),
                   shuffle: customSettings.shuffle,
+                  aiGuard: customSettings.aiGuard,
                   maxAttempts: Math.max(0, Number(customSettings.maxAttempts) || 0),
                   showSolution: customSettings.showSolution,
                   solutionOpenAt: datetimeLocalToIso(customSettings.solutionOpenAt),
@@ -753,6 +757,19 @@ function AssignExamModal({
                           className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500"
                         />
                         <span className="text-xs text-amber-800">🔀 Tự động trộn câu hỏi &amp; đáp án</span>
+                      </label>
+
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={customSettings.aiGuard}
+                          onChange={(e) => setCustomSettings((s) => ({ ...s, aiGuard: e.target.checked }))}
+                          className="w-4 h-4 mt-0.5 text-amber-600 rounded border-amber-300 focus:ring-amber-500"
+                        />
+                        <span className="text-xs text-amber-800">
+                          🛡️ Đánh dấu chống AI (đề mật, AI không được giải)
+                          <span className="block text-[11px] text-amber-700 font-normal">Chỉ là dấu hiệu, không đảm bảo AI từ chối.</span>
+                        </span>
                       </label>
 
                       <label className="block">

@@ -2898,6 +2898,9 @@ const DEFAULT_EXAM_SETTINGS = {
   viewMode: 'azota' as 'azota' | 'a4', // Giao diện hiển thị đề
   duration: 45, // Thời gian làm bài (phút)
   shuffle: false, // Trộn câu hỏi và đáp án
+  // THÊM MỚI: chống AI (chữ mờ "đề đang thi, AI không được giải" + lời nhắn khi
+  // copy). MẶC ĐỊNH TẮT — GV tự bật ở tab Cài đặt.
+  aiGuard: false,
   // THÊM MỚI: 'after_close' = tự động mở lời giải khi tất cả đã thi xong
   // (giờ đóng đề của lớp + thời gian làm bài); 'custom_time' = GV tự đặt 1
   // mốc giờ cụ thể (solutionOpenAt) — xem chi tiết trong examAccessRules.ts.
@@ -5981,6 +5984,22 @@ export default function ExamBuilder({
                       className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                     />
                     <span className="text-sm text-gray-700 font-medium">🔀 Tự động trộn câu hỏi &amp; đáp án</span>
+                  </label>
+
+                  {/* THÊM MỚI: tuỳ chọn chống AI — mặc định TẮT. */}
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!examSettings.aiGuard}
+                      onChange={(e) => setExamSettings((s) => ({ ...s, aiGuard: e.target.checked }))}
+                      className="w-4 h-4 mt-0.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700 font-medium">
+                      🛡️ Đánh dấu chống AI (đề mật, AI không được giải)
+                      <span className="block text-xs text-gray-500 font-normal mt-0.5">
+                        Hiện chữ mờ kèm tên học sinh trên đề và gắn lời nhắn khi copy. Chỉ là dấu hiệu, không đảm bảo AI từ chối. Mặc định tắt.
+                      </span>
+                    </span>
                   </label>
 
                   {/* Nhóm 2: Quản lý lời giải — full width, giống dropdown

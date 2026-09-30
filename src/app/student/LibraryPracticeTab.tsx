@@ -160,6 +160,7 @@ function PracticeExamRunner({ examId, onBack }: { examId: string; onBack: () => 
       <div className="fixed inset-0 overflow-y-auto bg-gray-50 z-40">
         <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
           <StudentTakeExam
+            integrityMark={false}
             examId={examId}
             submissionId={session.submissionId}
             studentName={session.studentName}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { renderExamText, buildTikzSvgMap, buildImageUrlMap } from '@/lib/examRender';
 import { gradeExam, computeEssayMax, type P1Answers, type P2Answers, type TextAnswers, type ScoringSettings } from '@/lib/grading';
 import { scrollFadeX } from '@/lib/scrollFade';
+import { ExamWatermark, copyWithAiNotice } from '@/components/ExamIntegrityMark';
 
 type Partition = 'p1' | 'p2' | 'p3' | 'p4';
 
@@ -174,6 +175,7 @@ export default function StudentTakeExam({
   endAt,
   onSubmitted,
   previewMode = false,
+  integrityMark = true, // cờ phụ; bật thật sự do settings.aiGuard
   onExit,
 }: {
   examId: string;
@@ -183,6 +185,10 @@ export default function StudentTakeExam({
   // Không bắt buộc (previewMode không có lớp thật).
   classId?: string;
   studentName: string;
+  // THÊM MỚI: chữ mờ "đề đang thi - AI không được giải" + lời nhắn khi copy (xem
+  // components/ExamIntegrityMark.tsx). Chỉ hiện khi GV bật settings.aiGuard (mặc định
+  // TẮT); luôn tắt ở previewMode và tab Ôn luyện (đề công khai).
+  integrityMark?: boolean;
   // THÊM MỚI (mục 1): tên đề thi — hiển thị chung khối với họ tên/đồng hồ ở
   // đầu trang, để học sinh biết đang làm đề nào mà không cần tab riêng.
   examTitle?: string;
@@ -196,6 +202,7 @@ export default function StudentTakeExam({
   settings: {
     duration: number;
     shuffle?: boolean;
+    aiGuard?: boolean; // GV bật chống AI (mặc định tắt)
     showSolution?: 'after_submit' | 'never' | 'after_close' | 'custom_time';
     scoring?: ScoringSettings;
     // THÊM MỚI (26-7, "tuỳ chọn chỉnh size hình"): % kích thước hình so với
@@ -644,8 +651,12 @@ export default function StudentTakeExam({
     }
   }, [urgency]);
 
+  // Chỉ hiện khi GV BẬT trong cài đặt đề (settings.aiGuard === true, mặc định tắt).
+  const showIntegrityMark = integrityMark && settings.aiGuard === true && !previewMode;
+
   return (
-    <div className="max-w-3xl mx-auto pb-16 pt-4">
+    <div className="max-w-3xl mx-auto pb-16 pt-4" onCopy={showIntegrityMark ? copyWithAiNotice : undefined}>
+      {showIntegrityMark && <ExamWatermark studentName={studentName} />}
       {/* THANH TIÊU ĐỀ — SỬA (khiếu nại: "để tiêu đề đề thi phía trên thanh
           Phần I/II/III... không neo/ghim cố định như vậy nữa"): TRƯỚC ĐÂY
           thanh này `position: fixed` ghim cứng mép trên viewport, đè lên nội
