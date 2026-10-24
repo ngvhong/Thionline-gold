@@ -1,0 +1,195 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  /* SỬA LỖI (khiếu nại: "chế độ ban đêm/tối trên điện thoại không thấy chữ
+     do chữ trắng trên nền trắng"): TRƯỚC ĐÂY có thêm 1 rule
+     "@media (prefers-color-scheme: dark)" (mẫu mặc định lúc khởi tạo dự án
+     bằng create-next-app, chưa xoá) tự đảo 2 biến --background/--foreground
+     của <body> sang nền đen/chữ trắng mỗi khi ĐIỆN THOẠI hoặc TRÌNH DUYỆT
+     đang bật chế độ tối — NHƯNG toàn bộ giao diện (mọi thẻ/card/ô nhập...)
+     đều code CỨNG theo bảng màu sáng (bg-white, text-gray-900, border-gray-200
+     ...) chứ không đọc theo 2 biến này. Kết quả: chỉ riêng <body> (phần nền
+     "ngoài cùng", thường bị các card trắng che gần hết) đổi sang chữ trắng,
+     còn mọi đoạn text nằm trực tiếp trên <body> (không nằm trong 1 thẻ có
+     class màu chữ riêng) SẼ THỪA HƯỞNG màu trắng đó — hiện trên nền trắng
+     của card => không đọc được. Ứng dụng hiện chỉ có 1 giao diện SÁNG hoàn
+     chỉnh, chưa có bản tối thực sự, nên khoá cứng --background/--foreground
+     về sáng bất kể máy đang bật sáng hay tối — vừa hết bug, vừa đảm bảo cả
+     app (GV) lẫn trang học sinh làm bài LUÔN hiển thị đúng 1 kiểu, không phụ
+     thuộc cài đặt Sáng/Tối của điện thoại hay trình duyệt. */
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* THÊM MỚI (mục 2 — sửa lỗi chữ nghiêng/đậm và công thức KaTeX không xuống
+   dòng, tràn ra ngoài lề trên điện thoại/màn hình hẹp). KaTeX mặc định
+   render mỗi công thức thành 1 <span class="katex"> inline-block — nội bộ
+   không tự ngắt dòng được, nhưng ĐOẠN VĂN BẢN CHỨA nó (đoạn <p>/<div> cha)
+   vẫn phải ngắt dòng ở khoảng trắng TRƯỚC/SAU công thức như bình thường.
+   overflow-wrap/word-break ở đây chỉ là lưới an toàn bổ sung, còn phần sửa
+   chính (bóc \textit/\textbf ra <em>/<strong> HTML) đã làm ở examRender.tsx. */
+.katex {
+  white-space: normal;
+}
+.katex-display {
+  /* SỬA (khiếu nại: "công thức căn giữa dài bị đẩy thành thanh trượt ngang
+     RIÊNG của chính nó, xấu, không đồng bộ với hiệu ứng mờ 2 mép đã có
+     trong app"). Nguyên nhân: KaTeX mặc định tự gán overflow-x: auto cho
+     .katex-display -> khi công thức dài hơn khối cha, chính .katex-display
+     (chứ không phải khối cha bọc ngoài) tạo ra 1 vùng cuộn ngang RIÊNG, độc
+     lập, và vẽ thanh cuộn mặc định (track/thumb xám) của trình duyệt vì nó
+     không có class .no-scrollbar / style scrollFadeX như khối cha.
+     Trong khi đó MỌI khối cha bọc công thức (câu dẫn, đáp án, lời giải...
+     xem SolutionView.tsx, ExamBuilder.tsx, StudentTakeExam.tsx,
+     examRender.tsx) đã có sẵn overflow-x-auto + no-scrollbar (ẩn track/thumb
+     mặc định) + scrollFadeX(...) (bóng mờ 2 mép báo hiệu còn nội dung, xem
+     src/lib/scrollFade.ts) — tức là app ĐÃ CÓ 1 cơ chế cuộn ngang đồng bộ
+     toàn app rồi, chỉ là .katex-display tự ý tạo thêm 1 tầng cuộn thứ 2 đè
+     lên trên, không dùng cơ chế đó.
+     -> Bỏ overflow-x: auto (không cho .katex-display tự cuộn riêng nữa),
+     giữ overflow-x: visible (mặc định) để phần công thức tràn ra sẽ "nổi"
+     lên khối cha gần nhất đang có overflow-x-auto — lúc đó CHÍNH khối cha
+     đó sẽ cuộn, hiển thị đúng hiệu ứng mờ 2 mép (scrollFadeX) đã đồng bộ
+     toàn app, không còn thanh cuộn xám xấu riêng của công thức nữa. Vẫn giữ
+     overflow-y: hidden để phòng công thức quá cao (phân số lồng nhau...)
+     không đẩy vỡ layout dọc. */
+  overflow-y: hidden;
+  max-width: 100%;
+  /* SỬA (khiếu nại: "công thức căn giữa $$...$$ vẫn còn khoảng trống trên
+     dưới", rồi "muốn mọi khoảng cách — hình, bảng, $$..$$, item — đều bằng
+     nhau như giữa 2 dòng văn bản bình thường") — KaTeX mặc định gán
+     margin: 1em 0 cho khối hiển thị (display math). Lúc đầu đổi tạm sang
+     0.5em, NHƯNG đơn vị em ở đây tính theo font-size RIÊNG của .katex (KaTeX
+     tự đặt to hơn chữ thường ~1.2 lần), nên margin thực tế theo px KHÔNG
+     khớp chính xác với margin cố định (8px = my-2) đang dùng cho hình vẽ/
+     TikZ và bảng thống kê bên dưới -> vẫn lệch, không "đều nhau" thật sự.
+     Đổi hẳn sang px CỐ ĐỊNH để cả 3 loại khối (hình, bảng, công thức căn
+     giữa) LUÔN cùng 1 khoảng cách trên/dưới, bất kể cỡ chữ của công thức đó
+     lớn nhỏ ra sao.
+     GIẢM (yêu cầu thu nhỏ khoảng cách chung): 8px (Tailwind my-2) -> 4px
+     (Tailwind my-1) -> 1.6px (my-[1.6px]) -> nay GIẢM HẲN VỀ 0 (test biên
+     17-7, theo yêu cầu "cho my-1 là 0px xem sao"), khớp với hình/bảng đã đổi
+     sang my-0 trong examRender.tsx và ExamBuilder.tsx. Nếu sau khi build lại
+     vẫn còn thấy khoảng trắng trên/dưới công thức $$...$$ dù margin đã = 0,
+     thì khoảng trắng đó KHÔNG phải do margin nữa — mà do chiều cao vật lý
+     (font-metrics) của chính công thức KaTeX tạo ra (phân số/tổng/căn... có
+     thể cao hơn 1 dòng chữ thường), không có "margin" nào để chỉnh thêm. */
+  margin: 0;
+}
+.exam-text-wrap,
+.exam-text-wrap p {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* THÊM MỚI (khiếu nại: "thanh trượt dọc hiện lên xấu xí ở câu dẫn/công thức,
+   dù nội dung vẫn nhìn thấy hết, bỏ đi" — NHƯNG sau đó khiếu nại tiếp:
+   "thanh trượt ngang vẫn cần cho điện thoại, giữ lại nếu công thức dài").
+   Nguyên nhân gốc: các khối câu dẫn/đáp án/công thức (overflow-x-auto +
+   whitespace-pre-wrap) chỉ cần cuộn NGANG khi công thức quá dài so với màn
+   hình hẹp — nhưng trên Android/Chrome di động, mỗi khối như vậy VẪN LUÔN vẽ
+   1 thanh cuộn (kể cả khi không có gì để cuộn), hiển thị như 1 vệt xám dọc
+   ngay sau công thức — chính là thứ bị chê "xấu xí".
+   -> Không được bỏ overflow-x-auto (mất khả năng cuộn ngang khi công thức
+   dài thật), mà chỉ ẩn PHẦN HIỂN THỊ của thanh cuộn đi, giữ nguyên chức năng
+   cuộn (vuốt ngang vẫn hoạt động bình thường khi nội dung tràn, chỉ là
+   không vẽ track/thumb ra nữa). */
+.no-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge cũ */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Android WebView/Opera */
+  width: 0;
+  height: 0;
+}
+
+/* THÊM MỚI (mấu neo tròn góc trên-phải trang làm bài — StudentTakeExam.tsx):
+   2 kiểu "nhịp thở" báo hiệu giờ sắp hết.
+   - anchorBreatheSlow: nhịp thở CHẬM, nhẹ (còn ~5 phút) — CHỈ phóng to/thu
+     nhỏ (không đổ bóng — neo hiện tại trong suốt, không dùng box-shadow ở
+     bất kỳ trạng thái nào), lặp đúng 3 lần rồi dừng (animation-iteration
+     -count đặt ở class .anchor-breathe-alert, không đặt ở đây để có thể tái
+     dùng keyframe cho việc khác nếu cần).
+   - anchorHeartbeat: nhịp thở NHANH + đổi màu như nhịp tim (còn dưới 1 phút)
+     — lặp vô hạn, mô phỏng 1 nhịp tim thật (đập - nghỉ ngắn - đập nhẹ hơn -
+     nghỉ dài) thay vì phóng to/thu nhỏ đều đặn nhàm chán. */
+@keyframes anchorBreatheSlow {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.22);
+  }
+}
+.anchor-breathe-alert {
+  animation: anchorBreatheSlow 1.6s ease-in-out 3;
+}
+
+@keyframes anchorHeartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+    background-color: #fee2e2;
+  }
+  25% {
+    transform: scale(1.24);
+    background-color: #fca5a5;
+  }
+  40% {
+    transform: scale(1);
+    background-color: #fee2e2;
+  }
+  55% {
+    transform: scale(1.12);
+    background-color: #f87171;
+  }
+  70% {
+    transform: scale(1);
+    background-color: #fee2e2;
+  }
+}
+.anchor-heartbeat {
+  animation: anchorHeartbeat 0.85s ease-in-out infinite;
+}
+
+/* THÊM MỚI (gợi ý lần đầu bấm neo — KHÔNG phải tín hiệu khẩn cấp): cố tình
+   KHÔNG dùng transform: scale (giống anchorBreatheSlow/anchorHeartbeat ở
+   trên) và KHÔNG đổi background-color, để học sinh lần đầu vào bài không
+   nhầm "còn ~5 phút" hay "sắp hết giờ". Thay vào đó dùng box-shadow lan toả
+   ra ngoài rồi mờ dần (kiểu "ping" — 1 vòng tròn nhạt to dần rồi biến mất),
+   chỉ lặp hữu hạn rồi tự dừng hẳn qua animation-iteration-count, không lặp
+   vô hạn như 2 kiểu trên vì đây chỉ là gợi ý "nhìn đây", không phải cảnh
+   báo cần theo dõi liên tục.
+   Màu xanh dương nhạt (#93c5fd/#3b82f6) khớp màu chữ mặc định của neo lúc
+   bình thường (text-blue-700), không trùng cam/đỏ của 2 trạng thái khẩn
+   cấp — tránh xung đột ý nghĩa màu sắc. */
+@keyframes anchorOnboardPing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 14px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+.anchor-onboard-ping {
+  animation: anchorOnboardPing 1.4s ease-out 4;
+}

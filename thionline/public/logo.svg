@@ -1,0 +1,23 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Thionline logo">
+  <defs>
+    <linearGradient id="silverSym" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f7f8fa"/>
+      <stop offset="18%" stop-color="#c7cad1"/>
+      <stop offset="38%" stop-color="#eef0f3"/>
+      <stop offset="55%" stop-color="#9a9ea7"/>
+      <stop offset="74%" stop-color="#dcdee2"/>
+      <stop offset="100%" stop-color="#aeb2ba"/>
+    </linearGradient>
+    <linearGradient id="goldSymSq" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fff2b0"/>
+      <stop offset="20%" stop-color="#f0c02e"/>
+      <stop offset="40%" stop-color="#8a5a10"/>
+      <stop offset="55%" stop-color="#f7dc6f"/>
+      <stop offset="75%" stop-color="#a06a12"/>
+      <stop offset="100%" stop-color="#f4d878"/>
+    </linearGradient>
+  </defs>
+  <rect x="7" y="7" width="86" height="86" rx="10" fill="none" stroke="url(#silverSym)" stroke-width="3.2"/>
+  <path d="M54.28 32.36 L19 32.36 L39.16 50 L19 67.64 L54.28 67.64" fill="none" stroke="url(#goldSymSq)" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M50.76 52.52 L61.84 63.61 L81 35.89" fill="none" stroke="#3aa63a" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
