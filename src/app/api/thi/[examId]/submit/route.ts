@@ -73,6 +73,8 @@ export async function POST(
           essayGraded: !!submission.essayGraded,
           essayImages: submission.essayImages || null,
           essayAnnotatedImages: submission.essayAnnotatedImages || null,
+          essayComments: submission.essayComments || null,
+          essayQuestionIds: ((exam as any).raw_data?.phan_4_TuLuan || []).map((q: any) => q.id),
           alreadySubmitted: true,
           showSolution,
           canRetake: canSelfRetake(effectiveSettings, submission.attemptNumber),
@@ -106,8 +108,11 @@ export async function POST(
     submission.answers = { p1Answers: p1Answers || {}, p2Answers: p2Answers || {}, textAnswers: textAnswers || {} };
     // Phần IV: chỉ lưu URL ảnh (đã upload trước đó qua /upload-essay-image
     // trong lúc làm bài) — KHÔNG tính vào score/total, chờ GV chấm tay.
-    submission.essayImages = essayImages || undefined;
-    submission.essayMaxScore = computeEssayMax((exam as any).raw_data, scoringUsed);
+    // Lượt tự luyện ở khu Ôn luyện (không có studentId) KHÔNG lưu ảnh tự luận
+    // và không có điểm Phần IV — không ai chấm, tránh chất đống dữ liệu.
+    const isPractice = !submission.studentId;
+    submission.essayImages = isPractice ? undefined : essayImages || undefined;
+    submission.essayMaxScore = isPractice ? 0 : computeEssayMax((exam as any).raw_data, scoringUsed);
     submission.submitted_at = new Date();
     // THÊM MỚI (Giai đoạn 2 — tab "Đề được giao"): CHỈ THÊM điều kiện, không
     // đổi cách ghi studentId cũ ở trên. Nếu request này tới từ 1 trình duyệt

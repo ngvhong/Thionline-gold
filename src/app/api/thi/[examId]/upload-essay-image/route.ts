@@ -64,6 +64,15 @@ export async function POST(
       return NextResponse.json({ error: 'Bài đã nộp rồi, không tải thêm ảnh được nữa.' }, { status: 403 });
     }
 
+    // KHÔNG nhận ảnh tự luận ở khu Ôn luyện (tự luyện, studentId = null):
+    // không có giáo viên nào chấm, ảnh chỉ tốn dung lượng lưu trữ.
+    if (!submission.studentId) {
+      return NextResponse.json(
+        { error: 'Khu Ôn luyện không nhận bài tự luận (không có giáo viên chấm). Em làm vào vở và đối chiếu lời giải nhé.' },
+        { status: 403 }
+      );
+    }
+
     const ext = file.type === 'image/png' ? 'png' : 'jpg';
     const pathname = `essay/${examId}/${submissionId}/${questionId}-${Date.now()}.${ext}`;
 

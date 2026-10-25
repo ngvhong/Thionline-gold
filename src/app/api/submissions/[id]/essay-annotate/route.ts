@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
-import { put } from '@/lib/storage';
+import { put, del } from '@/lib/storage';
 import { connectToDatabase } from '@/lib/mongodb';
 import { ClassModel } from '@/lib/classModel';
 import { StudentModel } from '@/lib/studentModel';
@@ -72,10 +72,21 @@ export async function POST(
 
     const allAnnotated: Record<string, string[]> = { ...(submission.essayAnnotatedImages || {}) };
     const forQuestion = [...(allAnnotated[questionId] || [])];
+    const oldAnnotatedUrl = forQuestion[imageIndex];
     forQuestion[imageIndex] = blob.url;
     allAnnotated[questionId] = forQuestion;
     submission.essayAnnotatedImages = allAnnotated;
     await submission.save();
+
+    // Chấm lại trên cùng 1 ảnh thì ảnh đã chấm cũ không còn ai dùng — xóa để
+    // khỏi chất đống dung lượng (chỉ xóa bản đã chấm, KHÔNG đụng ảnh gốc).
+    if (oldAnnotatedUrl && oldAnnotatedUrl !== blob.url) {
+      try {
+        await del(oldAnnotatedUrl);
+      } catch (err) {
+        console.error('Không xóa được ảnh đã chấm cũ (bỏ qua):', err);
+      }
+    }
 
     return NextResponse.json({ url: blob.url, essayAnnotatedImages: submission.essayAnnotatedImages }, { status: 200 });
   } catch (err) {

@@ -8,47 +8,44 @@ import {
   setFreeTrialDays,
   getRegistrationMode,
   setRegistrationMode,
+  getRequireEmailVerification,
+  setRequireEmailVerification,
 } from '@/lib/appSettings';
 
-// GET /api/admin/settings — cho trang Quản trị biết ĐÃ cấu hình Gemini API
-// key hay chưa (kèm bản CHE BỚT/masked), và số ngày dùng thử mặc định hiện
-// tại (THÊM MỚI — Phần 2b, xem getFreeTrialDays). Chỉ admin gọi được
-// (giống mọi route /api/admin/* khác).
+// Cấu hình chung do admin chỉnh ở tab Quản trị > Cấu hình. Mọi nhánh GET/PUT
+// đều trả ĐỦ toàn bộ cấu hình hiện tại (client gán thẳng vào state, thiếu
+// trường nào là giao diện hiểu nhầm trường đó đang tắt).
+async function buildSettingsResponse() {
+  const [geminiApiKey, freeTrialDays, registrationMode, requireEmailVerification] = await Promise.all([
+    getGeminiApiKey(),
+    getFreeTrialDays(),
+    getRegistrationMode(),
+    getRequireEmailVerification(),
+  ]);
+  return {
+    geminiApiKeyConfigured: !!geminiApiKey,
+    geminiApiKeyMasked: geminiApiKey ? maskApiKey(geminiApiKey) : '',
+    freeTrialDays,
+    registrationMode,
+    requireEmailVerification,
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const admin = await requireAdmin(request);
     if (!admin) {
       return NextResponse.json({ error: 'Bạn không có quyền truy cập trang này.' }, { status: 403 });
     }
-
-    const [geminiApiKey, freeTrialDays, registrationMode] = await Promise.all([
-      getGeminiApiKey(),
-      getFreeTrialDays(),
-      getRegistrationMode(),
-    ]);
-
-    return NextResponse.json(
-      {
-        geminiApiKeyConfigured: !!geminiApiKey,
-        geminiApiKeyMasked: geminiApiKey ? maskApiKey(geminiApiKey) : '',
-        freeTrialDays,
-        registrationMode,
-      },
-      { status: 200 }
-    );
+    return NextResponse.json(await buildSettingsResponse(), { status: 200 });
   } catch (err) {
     console.error('Lỗi lấy cấu hình app (admin):', err);
     return NextResponse.json({ error: 'Không lấy được cấu hình, xem chi tiết ở server log.' }, { status: 500 });
   }
 }
 
-// PUT /api/admin/settings — lưu/ghi đè cấu hình. Nhận 1 TRONG 2 field
-// riêng biệt trong body (ĐỘC LẬP với nhau, giống nhánh status/planUpdate ở
-// PATCH teachers/[id]) để 2 khối UI (key AI + số ngày dùng thử) gọi lưu
-// riêng, không bắt buộc phải gửi cả 2 field cùng lúc:
-//   - "geminiApiKey": string không rỗng sau khi trim — rỗng thì từ chối
-//     thay vì lỡ tay xoá key đang dùng tốt.
-//   - "freeTrialDays": số nguyên dương — THÊM MỚI (Phần 2b).
+// PUT nhận 1 trong các trường: geminiApiKey | freeTrialDays | registrationMode
+// | requireEmailVerification — mỗi lần chỉ đổi 1 trường.
 export async function PUT(request: NextRequest) {
   try {
     const admin = await requireAdmin(request);
@@ -64,37 +61,18 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: 'Vui lòng nhập Gemini API key.' }, { status: 400 });
       }
       await setGeminiApiKey(geminiApiKey);
-      const [freeTrialDays, registrationMode] = await Promise.all([getFreeTrialDays(), getRegistrationMode()]);
-      return NextResponse.json(
-        { geminiApiKeyConfigured: true, geminiApiKeyMasked: maskApiKey(geminiApiKey), freeTrialDays, registrationMode },
-        { status: 200 }
-      );
+      return NextResponse.json(await buildSettingsResponse(), { status: 200 });
     }
 
     if ('freeTrialDays' in body) {
       const days = Number(body?.freeTrialDays);
       if (!Number.isFinite(days) || !Number.isInteger(days) || days <= 0) {
-        return NextResponse.json(
-          { error: 'Số ngày dùng thử phải là số nguyên dương.' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'Số ngày dùng thử phải là số nguyên dương.' }, { status: 400 });
       }
       await setFreeTrialDays(days);
-      const [geminiApiKey, registrationMode] = await Promise.all([getGeminiApiKey(), getRegistrationMode()]);
-      return NextResponse.json(
-        {
-          geminiApiKeyConfigured: !!geminiApiKey,
-          geminiApiKeyMasked: geminiApiKey ? maskApiKey(geminiApiKey) : '',
-          freeTrialDays: days,
-          registrationMode,
-        },
-        { status: 200 }
-      );
+      return NextResponse.json(await buildSettingsResponse(), { status: 200 });
     }
 
-    // THÊM MỚI (đóng/duyệt đăng ký): nhánh lưu chế độ đăng ký — ĐỘC LẬP với
-    // 2 nhánh trên, cùng nguyên tắc (chỉ 1 field/lần gọi). Chỉ nhận đúng 3
-    // giá trị hợp lệ của registrationMode (xem appSettingsModel.ts).
     if ('registrationMode' in body) {
       const mode = body?.registrationMode;
       if (mode !== 'open' && mode !== 'approval' && mode !== 'closed') {
@@ -104,20 +82,19 @@ export async function PUT(request: NextRequest) {
         );
       }
       await setRegistrationMode(mode);
-      const [geminiApiKey, freeTrialDays] = await Promise.all([getGeminiApiKey(), getFreeTrialDays()]);
-      return NextResponse.json(
-        {
-          geminiApiKeyConfigured: !!geminiApiKey,
-          geminiApiKeyMasked: geminiApiKey ? maskApiKey(geminiApiKey) : '',
-          freeTrialDays,
-          registrationMode: mode,
-        },
-        { status: 200 }
-      );
+      return NextResponse.json(await buildSettingsResponse(), { status: 200 });
+    }
+
+    if ('requireEmailVerification' in body) {
+      if (typeof body.requireEmailVerification !== 'boolean') {
+        return NextResponse.json({ error: 'requireEmailVerification phải là true hoặc false.' }, { status: 400 });
+      }
+      await setRequireEmailVerification(body.requireEmailVerification);
+      return NextResponse.json(await buildSettingsResponse(), { status: 200 });
     }
 
     return NextResponse.json(
-      { error: 'Yêu cầu không hợp lệ — cần có trường geminiApiKey, freeTrialDays hoặc registrationMode.' },
+      { error: 'Yêu cầu không hợp lệ — cần có trường geminiApiKey, freeTrialDays, registrationMode hoặc requireEmailVerification.' },
       { status: 400 }
     );
   } catch (err) {

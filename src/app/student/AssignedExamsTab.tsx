@@ -23,6 +23,7 @@
 import { useEffect, useState } from 'react';
 import StudentTakeExam from '@/app/thi/[examId]/StudentTakeExam';
 import SolutionView from '@/app/thi/[examId]/SolutionView';
+import EssayResultBlock from '@/components/EssayResultBlock';
 import { round2 } from '@/lib/grading';
 import type { P1Answers, P2Answers, TextAnswers, ScoringSettings } from '@/lib/grading';
 
@@ -42,6 +43,9 @@ type AssignmentRow = {
   total: number | null;
   scorePoints: number | null;
   maxScorePoints: number | null;
+  essayState?: 'none' | 'pending' | 'graded';
+  essayScoreSum?: number;
+  essayMax?: number;
   attemptNumber: number;
   canRetake: boolean;
   assignedAt: string | null;
@@ -78,6 +82,13 @@ type SubmitResult = {
   canRetake?: boolean;
   studentName?: string;
   imageScalePercent?: number;
+  essayScores?: Record<string, number> | null;
+  essayMaxScore?: number | null;
+  essayGraded?: boolean;
+  essayImages?: Record<string, string[]> | null;
+  essayAnnotatedImages?: Record<string, string[]> | null;
+  essayComments?: Record<string, string> | null;
+  essayQuestionIds?: string[];
 };
 
 // ============================================================
@@ -123,6 +134,13 @@ function AssignedExamRunner({
           canRetake: !!data.canRetake,
           studentName: data.studentName,
           imageScalePercent: data.settings?.imageScalePercent,
+          essayScores: data.essayScores,
+          essayMaxScore: data.essayMaxScore,
+          essayGraded: !!data.essayGraded,
+          essayImages: data.essayImages,
+          essayAnnotatedImages: data.essayAnnotatedImages,
+          essayComments: data.essayComments,
+          essayQuestionIds: data.essayQuestionIds,
         });
         setShowSolutionView(false);
         setPhase('done');
@@ -212,15 +230,30 @@ function AssignedExamRunner({
 
     const totalScorePoints = typeof result.scorePoints === 'number' ? result.scorePoints : null;
     const totalMaxScorePoints = typeof result.maxScorePoints === 'number' ? result.maxScorePoints : null;
+    const essayMaxVal = typeof result.essayMaxScore === 'number' ? result.essayMaxScore : 0;
+    const hasEssay = essayMaxVal > 0 && (result.essayQuestionIds?.length || 0) > 0;
+    const essaySum = round2(Object.values(result.essayScores || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0));
     const displayScore =
       totalScorePoints !== null && totalMaxScorePoints !== null
-        ? `${round2(totalScorePoints)}/${round2(totalMaxScorePoints)} điểm`
+        ? hasEssay && result.essayGraded
+          ? `${round2(totalScorePoints + essaySum)}/${round2(totalMaxScorePoints + essayMaxVal)} điểm`
+          : `${round2(totalScorePoints)}/${round2(totalMaxScorePoints)} điểm`
         : `${result.score}/${result.total}`;
 
     return (
       <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
         <h3 className="text-base font-bold text-gray-900 mb-1">Đã nộp bài!</h3>
         <p className="text-3xl font-bold text-blue-600 mb-4">{displayScore}</p>
+        {hasEssay && (
+          <EssayResultBlock
+            questionIds={result.essayQuestionIds || []}
+            scores={result.essayScores}
+            comments={result.essayComments}
+            images={result.essayImages}
+            annotated={result.essayAnnotatedImages}
+            graded={!!result.essayGraded}
+          />
+        )}
         <div className="space-y-2">
           {result.showSolution && result.solutionData && (
             <button
@@ -263,6 +296,7 @@ export default function AssignedExamsTab() {
   const [error, setError] = useState('');
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [active, setActive] = useState<{ examId: string; classId: string; studentId: string } | null>(null);
+  const [query, setQuery] = useState('');
 
   function load() {
     setLoading(true);
@@ -319,10 +353,17 @@ export default function AssignedExamsTab() {
     );
   }
 
+  // 25-10: lọc theo ô tìm kiếm (chỉ hiện khi > 8 đề). Không dùng hook ở đây vì
+  // đã có return sớm phía trên — dùng biến thường + state khai báo ở đầu component.
+  const q = query.trim().toLowerCase();
+  const visibleAssignments = q
+    ? assignments.filter((a) => `${a.examTitle} ${a.className}`.toLowerCase().includes(q))
+    : assignments;
+
   // Nhóm theo lớp (className + teacherName) — giữ nguyên thứ tự đã sort mới
   // nhất trước từ API.
   const groups = new Map<string, { className: string; teacherName: string; rows: AssignmentRow[] }>();
-  assignments.forEach((a) => {
+  visibleAssignments.forEach((a) => {
     const key = a.classId;
     if (!groups.has(key)) {
       groups.set(key, { className: a.className, teacherName: a.teacherName, rows: [] });
@@ -331,7 +372,19 @@ export default function AssignedExamsTab() {
   });
 
   return (
-    <div className="space-y-4 text-left">
+    <div className="text-left">
+      {assignments.length > 8 && (
+        <input
+          type="search"
+          value={query}
+          onChange={(ev) => setQuery(ev.target.value)}
+          placeholder={`Tìm trong ${assignments.length} đề được giao…`}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-base outline-none focus:border-blue-400 mb-3"
+        />
+      )}
+      {visibleAssignments.length === 0 && <p className="text-sm text-gray-400 text-center py-4">Không có đề nào khớp.</p>}
+      {/* Khung cuộn (thanh mảnh) khi có nhiều đề; đề được giao MỚI nhất nằm trên cùng. */}
+      <div className="space-y-4 max-h-[65vh] overflow-y-auto thin-scroll pr-1">
       {[...groups.entries()].map(([classId, group]) => (
         <div key={classId}>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -347,11 +400,20 @@ export default function AssignedExamsTab() {
                   className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{a.examTitle}</p>
+                    <p className="text-sm font-medium text-gray-800 line-clamp-2 break-words">
+                      {a.examTitle}
+                      {a.assignedAt && Date.now() - new Date(a.assignedAt).getTime() < 7 * 24 * 3600 * 1000 && a.status === 'not_done' && (
+                        <span className="ml-1.5 align-middle text-[10px] font-bold text-white bg-red-500 rounded px-1.5 py-0.5">MỚI</span>
+                      )}
+                    </p>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {a.status === 'done'
                         ? typeof a.scorePoints === 'number' && typeof a.maxScorePoints === 'number'
-                          ? `Đã làm — ${round2(a.scorePoints)}/${round2(a.maxScorePoints)} điểm`
+                          ? a.essayState === 'graded'
+                            ? `Đã làm — ${round2(a.scorePoints + (a.essayScoreSum || 0))}/${round2(a.maxScorePoints + (a.essayMax || 0))} điểm (đã chấm tự luận)`
+                            : a.essayState === 'pending'
+                            ? `Đã làm — ${round2(a.scorePoints)}/${round2(a.maxScorePoints)} điểm (tự luận chờ chấm)`
+                            : `Đã làm — ${round2(a.scorePoints)}/${round2(a.maxScorePoints)} điểm`
                           : `Đã làm — ${a.score}/${a.total} câu`
                         : a.isNotYetOpen
                         ? 'Chưa tới giờ mở đề'
@@ -364,7 +426,7 @@ export default function AssignedExamsTab() {
                     type="button"
                     disabled={disabled}
                     onClick={() => setActive({ examId: a.examId, classId: a.classId, studentId: a.studentId })}
-                    className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700 text-white"
+                    className="shrink-0 text-sm font-semibold px-4 py-2.5 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     {a.status === 'done' ? 'Xem lại' : 'Làm bài'}
                   </button>
@@ -374,6 +436,7 @@ export default function AssignedExamsTab() {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }

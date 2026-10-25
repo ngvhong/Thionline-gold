@@ -16,6 +16,7 @@ import { scrollFadeX } from '@/lib/scrollFade';
 // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): popup "Chia sẻ vào
 // kho chung", xem chi tiết trong component.
 import ShareToLibraryModal from '@/components/ShareToLibraryModal';
+import { DEFAULT_EXAM_DURATION_MINUTES, DEFAULT_EXAM_MAX_ATTEMPTS, LEGACY_EXAM_DURATION_MINUTES, LEGACY_EXAM_MAX_ATTEMPTS } from '@/lib/examDefaults';
 
 // Icon nét vẽ đơn giản (kiểu outline, 1 màu, kế thừa currentColor) — dùng
 // thay cho emoji ở Bảng Điều Khiển Phòng Thi để đồng bộ hình thức, tránh mỗi
@@ -2896,7 +2897,7 @@ function OpenBookIcon({ className }: { className?: string }) {
 // tự quay về 100% như mong đợi.
 const DEFAULT_EXAM_SETTINGS = {
   viewMode: 'azota' as 'azota' | 'a4', // Giao diện hiển thị đề
-  duration: 45, // Thời gian làm bài (phút)
+  duration: DEFAULT_EXAM_DURATION_MINUTES, // Thời gian làm bài (phút) — mặc định 90
   shuffle: false, // Trộn câu hỏi và đáp án
   // THÊM MỚI: 'after_close' = tự động mở lời giải khi tất cả đã thi xong
   // (giờ đóng đề của lớp + thời gian làm bài); 'custom_time' = GV tự đặt 1
@@ -2905,7 +2906,7 @@ const DEFAULT_EXAM_SETTINGS = {
   solutionOpenAt: '' as string, // ISO string, chỉ dùng khi showSolution = 'custom_time'
   // THÊM MỚI: số lần học sinh được TỰ làm lại (không cần GV bấm "Cho làm
   // lại"). 0 = không giới hạn (mặc định, theo đúng yêu cầu giáo viên).
-  maxAttempts: 0,
+  maxAttempts: DEFAULT_EXAM_MAX_ATTEMPTS, // mặc định 3 lần (0 = không giới hạn)
   // THÊM MỚI (giờ mở/đóng đề MẶC ĐỊNH — áp dụng cho MỌI lớp được giao đề
   // này): trước đây giờ mở/đóng chỉ cấu hình được ở panel "Giao đề" của
   // TỪNG lớp riêng lẻ, nên giao 1 đề cho nhiều lớp cùng khung giờ phải
@@ -4265,6 +4266,11 @@ export default function ExamBuilder({
           // B thực sự có lưu.
           ...DEFAULT_EXAM_SETTINGS,
           ...result.exam.settings,
+          // Đề cũ thiếu field => giữ luật cũ (không áp mặc định mới 90 phút/3 lần).
+          duration:
+            typeof result.exam.settings.duration === 'number' ? result.exam.settings.duration : LEGACY_EXAM_DURATION_MINUTES,
+          maxAttempts:
+            typeof result.exam.settings.maxAttempts === 'number' ? result.exam.settings.maxAttempts : LEGACY_EXAM_MAX_ATTEMPTS,
           // SỬA: {...s, ...result.exam.settings} ở trên ghi đè NGUYÊN cả
           // object scoring — đề CŨ lưu trước khi có tính năng Phần IV sẽ
           // thiếu p4PerQuestion trong settings.scoring đã lưu, khiến field
@@ -5614,7 +5620,7 @@ export default function ExamBuilder({
         </div>
       </div>
 
-      <div className={`mx-auto px-4 ${builderSubTab === 'view' ? 'max-w-[1600px]' : 'max-w-6xl'}`}>
+      <div className="mx-auto px-4 max-w-6xl">
         {/* THÊM MỚI: thanh trạng thái "đóng băng" 2 nguồn dữ liệu hiện tại
             (tệp/nội dung đề .tex + các thư mục ảnh đã chọn) — luôn hiển thị
             RÕ đang dùng đúng nguồn nào thay vì phải nhớ đã bấm nút nào lúc
@@ -6471,7 +6477,11 @@ export default function ExamBuilder({
                 // max-w-6xl (72rem) lên max-w-[1600px] kèm w-full để lấp hết
                 // khoảng rộng đó trên màn hình lớn, đỡ chật khi câu hỏi có
                 // bảng/hình TikZ dài.
-                : 'max-w-[1600px] w-full mx-auto bg-transparent'
+                // SỬA (yêu cầu 25-10: "Xem đề quá rộng, muốn bằng trang thi"):
+                // thu về max-w-3xl — ĐÚNG bề rộng khung làm bài của học sinh
+                // (StudentTakeExam: "max-w-3xl mx-auto"), để GV thấy chữ/hình
+                // xuống dòng y hệt trang thi thật.
+                : 'max-w-3xl w-full mx-auto bg-transparent'
             }
           >
             {/* SỬA (khiếu nại: bỏ 4 tab con Phần I/II/III/IV — GV phải bấm

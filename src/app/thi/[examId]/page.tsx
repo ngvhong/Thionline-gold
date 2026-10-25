@@ -49,9 +49,7 @@ export async function generateMetadata({
   const examTitle = await getExamTitle(examId);
 
   const title = examTitle ? `${examTitle} - ${APP_NAME}` : APP_NAME;
-  const description = examTitle
-    ? `Vào phòng thi "${examTitle}" trên ${APP_NAME} — Hệ thống thi trực tuyến.`
-    : `${APP_NAME} — Hệ thống thi trực tuyến.`;
+  const description = 'Thi online · Ôn luyện';
 
   return {
     title,
@@ -66,15 +64,15 @@ export async function generateMetadata({
       // gọi MongoDB + tải font Google mỗi lần) — vừa chậm (dễ bị crawler
       // Zalo/Messenger bỏ qua ảnh vì quá thời gian chờ), vừa thừa vì tên
       // đề đã hiển thị sẵn qua `title`/`description` ở trên rồi. Giờ dùng
-      // LUÔN ảnh tĩnh chung `public/opengraph-image.png` (giống hệt trang
+      // LUÔN ảnh tĩnh chung `public/og-banner-v2.png` (giống hệt trang
       // chủ) — nhanh, không phụ thuộc DB/mạng ngoài lúc quét link.
-      images: [{ url: '/opengraph-image.png', width: 630, height: 280, alt: APP_NAME }],
+      images: [{ url: '/og-banner-v2.png', width: 1200, height: 400, alt: APP_NAME }],
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title,
       description,
-      images: ['/opengraph-image.png'],
+      images: ['/og-banner-v2.png'],
     },
   };
 }

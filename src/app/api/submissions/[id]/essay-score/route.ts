@@ -28,7 +28,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'ID lượt làm bài không hợp lệ.' }, { status: 400 });
     }
 
-    const { questionId, score } = await request.json();
+    const { questionId, score, comment } = await request.json();
     if (typeof questionId !== 'string' || !questionId) {
       return NextResponse.json({ error: 'Thiếu thông tin câu hỏi.' }, { status: 400 });
     }
@@ -61,12 +61,20 @@ export async function PATCH(
 
     const merged: Record<string, number> = { ...(submission.essayScores || {}), [questionId]: score };
     submission.essayScores = merged;
+    // Nhận xét (không bắt buộc): rỗng = xóa nhận xét của câu này.
+    if (typeof comment === 'string') {
+      const comments: Record<string, string> = { ...(submission.essayComments || {}) };
+      const text = comment.trim().slice(0, 500);
+      if (text) comments[questionId] = text;
+      else delete comments[questionId];
+      submission.essayComments = comments;
+    }
     submission.essayGraded =
       essayQuestionIds.length > 0 && essayQuestionIds.every((qid) => typeof merged[qid] === 'number' && !Number.isNaN(merged[qid]));
     await submission.save();
 
     return NextResponse.json(
-      { essayScores: submission.essayScores, essayGraded: submission.essayGraded },
+      { essayScores: submission.essayScores, essayGraded: submission.essayGraded, essayComments: submission.essayComments || null },
       { status: 200 }
     );
   } catch (err) {

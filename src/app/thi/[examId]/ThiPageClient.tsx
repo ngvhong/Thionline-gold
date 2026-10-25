@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import EssayResultBlock from '@/components/EssayResultBlock';
 import { useParams, useSearchParams } from 'next/navigation';
 import StudentTakeExam from './StudentTakeExam';
 import SolutionView from './SolutionView';
@@ -83,6 +84,8 @@ type SubmitResult = {
   essayGraded?: boolean;
   essayImages?: Record<string, string[]> | null;
   essayAnnotatedImages?: Record<string, string[]> | null;
+  essayComments?: Record<string, string> | null;
+  essayQuestionIds?: string[];
   // THÊM MỚI (26-7, "tuỳ chọn chỉnh size hình"): chỉ có giá trị ở luồng MỞ
   // LẠI LINK sau khi đã nộp (không có `session` để lấy settings từ đó) —
   // server trả kèm effectiveSettings.imageScalePercent trong nhánh
@@ -291,6 +294,8 @@ export default function ThiPageClient() {
           essayGraded: !!data.essayGraded,
           essayImages: data.essayImages,
           essayAnnotatedImages: data.essayAnnotatedImages,
+          essayComments: data.essayComments,
+          essayQuestionIds: data.essayQuestionIds,
           imageScalePercent: data.settings?.imageScalePercent,
         });
         setPhase('done');
@@ -511,7 +516,9 @@ export default function ThiPageClient() {
     const essayRawQuestions: any[] =
       (session?.raw_data || result.solutionData?.examData)?.phan_4_TuLuan || [];
     const essayQuestionIds: string[] =
-      essayRawQuestions.length > 0
+      result.essayQuestionIds && result.essayQuestionIds.length > 0
+        ? result.essayQuestionIds
+        : essayRawQuestions.length > 0
         ? essayRawQuestions.map((q: any) => q.id)
         : Object.keys(essayImagesMap).length > 0
         ? Object.keys(essayImagesMap)
@@ -569,45 +576,14 @@ export default function ThiPageClient() {
               (ưu tiên essayAnnotatedImages, không có thì hiện ảnh gốc
               essayImages). Chỉ hiện khi đề có Phần IV (hasEssay). */}
           {hasEssay && essayQuestionIds.length > 0 && (
-            <div className="text-left mb-4">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                Phần IV: Tự luận
-              </h3>
-              <div className="space-y-2">
-                {essayQuestionIds.map((qid, i) => {
-                  const urls = essayImagesMap[qid] || [];
-                  const annotatedUrls = essayAnnotatedMap[qid] || [];
-                  const qScore = essayScoresMap[qid];
-                  const qGraded = qScore !== undefined;
-                  return (
-                    <div key={qid} className="border border-gray-200 rounded-lg px-3 py-2">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-sm font-medium text-gray-700">Câu {i + 1}</span>
-                        <span className="text-xs font-semibold text-gray-500">
-                          {qGraded ? `${qScore}đ` : 'chưa chấm'}
-                        </span>
-                      </div>
-                      {urls.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {urls.map((url, idx) => (
-                            <img
-                              key={url}
-                              src={annotatedUrls[idx] || url}
-                              alt={`Ảnh bài làm câu ${i + 1} - trang ${idx + 1}`}
-                              className="w-16 h-16 object-cover rounded-lg border border-gray-200"
-                              loading="lazy"
-                              decoding="async"
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-gray-400 italic">Chưa nộp ảnh câu này.</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <EssayResultBlock
+              questionIds={essayQuestionIds}
+              scores={result.essayScores}
+              comments={result.essayComments}
+              images={result.essayImages}
+              annotated={result.essayAnnotatedImages}
+              graded={!!result.essayGraded}
+            />
           )}
           {result.showSolution && result.solutionData && (
             <button

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import type { NextRequest } from 'next/server';
 import { connectToDatabase } from './mongodb';
+import { getRequireEmailVerification } from './appSettings';
 import { TeacherModel } from './teacherModel';
 
 // QUAN TRỌNG: đặt JWT_SECRET thật trong file .env.local (biến môi trường),
@@ -217,7 +218,12 @@ export async function getSessionContext(
     // (undefined) — coi như đã xác nhận (=== false mới coi là CHƯA), đúng
     // default: true của schema (xem teacherModel.ts), không tự nhiên khoá
     // nhầm tài khoản cũ.
-    emailVerified: teacher.emailVerified !== false,
+    //
+    // SỬA (25-10): chỉ coi là CHƯA xác nhận khi admin đang BẬT yêu cầu xác
+    // nhận email (Quản trị > Cấu hình). Tắt (mặc định) thì mọi tài khoản dùng
+    // được ngay. Toán tử || nên chỉ đọc cài đặt khi tài khoản thật sự chưa
+    // xác nhận — tài khoản bình thường không tốn thêm truy vấn nào.
+    emailVerified: teacher.emailVerified !== false || !(await getRequireEmailVerification()),
   };
 }
 

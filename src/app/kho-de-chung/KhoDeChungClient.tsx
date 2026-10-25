@@ -10,6 +10,7 @@ import { renderExamText, buildTikzSvgMap, buildImageUrlMap } from '@/lib/examRen
 // SỬA (đồng bộ icon): thay emoji 📚/📥 bằng icon SVG nét mảnh dùng chung,
 // xem giải thích trong LibraryIcons.tsx.
 import { LibraryBookIcon, LibraryDownloadIcon } from '@/components/LibraryIcons';
+import TeacherSidebar, { type SidebarTeacher } from './TeacherSidebar';
 
 type FolderNode = {
   _id: string;
@@ -93,17 +94,26 @@ function FolderTree({
                 <button
                   type="button"
                   onClick={() => onToggleExpand(f._id)}
-                  className="w-4 h-4 shrink-0 text-gray-400 hover:text-gray-600 text-xs"
+                  className="w-7 h-7 shrink-0 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800"
                   aria-label={isExpanded ? 'Thu gọn' : 'Mở rộng'}
+                  aria-expanded={isExpanded}
                 >
-                  {isExpanded ? '▾' : '▸'}
+                  {/* 25-10: mũi tên lớn hơn (vùng bấm 28px) thay cho ký tự ▸ nhỏ xíu, xoay xuống khi mở */}
+                  <svg viewBox="0 0 24 24" fill="none" className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} aria-hidden="true">
+                    <path d="m9 6 6 6-6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </button>
               ) : (
-                <span className="w-4 h-4 shrink-0" />
+                <span className="w-7 h-7 shrink-0" />
               )}
               <button
                 type="button"
-                onClick={() => onSelect(f._id)}
+                onClick={() => {
+                  // 25-10: bấm vào TÊN thư mục vừa chọn (xem đề) vừa mở/đóng nhánh con —
+                  // người dùng mới không cần biết phải bấm đúng mũi tên nhỏ.
+                  onSelect(f._id);
+                  if (hasChildren) onToggleExpand(f._id);
+                }}
                 className={`flex-1 text-left px-2 py-1.5 rounded-lg text-sm transition ${
                   selectedId === f._id ? 'bg-blue-100 text-blue-800 font-semibold' : 'text-gray-700 hover:bg-gray-100'
                 }`}
@@ -295,6 +305,7 @@ function ExamPreviewModal({ examId, onClose, onCloned }: { examId: string; onClo
 export default function KhoDeChungClient() {
   const router = useRouter();
   const [checkingSession, setCheckingSession] = useState(true);
+  const [teacher, setTeacher] = useState<SidebarTeacher | null>(null);
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [treeError, setTreeError] = useState('');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
@@ -319,6 +330,7 @@ export default function KhoDeChungClient() {
           router.replace('/login');
           return;
         }
+        setTeacher({ name: data.teacher.name || '', email: data.teacher.email || '' });
       } catch {
         if (!cancelled) router.replace('/login');
       } finally {
@@ -377,23 +389,21 @@ export default function KhoDeChungClient() {
   }
 
   return (
+    <TeacherSidebar teacher={teacher}>
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center mb-1">
           <h1 className="flex items-center gap-2 text-xl font-bold text-gray-900">
             <LibraryBookIcon className="w-5 h-5 shrink-0 text-blue-600" />
             Kho đề chung
           </h1>
-          <button onClick={() => router.push('/')} className="text-sm font-semibold text-gray-500 hover:text-gray-700">
-            ← Về Trang chủ
-          </button>
         </div>
         <p className="text-sm text-gray-500 mb-6">
           Duyệt đề do các giáo viên khác đã chia sẻ theo cây thư mục, xem trước rồi lấy về dùng cho lớp của bạn.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-3">
+          <div className="bg-white border border-gray-200 rounded-xl p-3 md:sticky md:top-4 md:self-start md:max-h-[calc(100vh-2rem)] md:overflow-y-auto thin-scroll">
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 px-2">Thư mục</h2>
             {treeError && <p className="text-sm text-red-600 px-2">{treeError}</p>}
             {!treeError && folders.length === 0 && <p className="text-sm text-gray-400 px-2">Chưa có nhánh nào.</p>}
@@ -409,7 +419,7 @@ export default function KhoDeChungClient() {
           </div>
 
           <div className="bg-white border border-gray-200 rounded-xl p-4">
-            {!selectedFolderId && <p className="text-sm text-gray-400">Chọn 1 nhánh thư mục bên trái để xem đề đã chia sẻ.</p>}
+            {!selectedFolderId && <p className="text-sm text-gray-400">Bấm vào một thư mục bên trái để mở và xem đề đã chia sẻ (mũi tên ▸ cạnh tên = có thư mục con).</p>}
             {selectedFolderId && examsLoading && <p className="text-sm text-gray-500">Đang tải...</p>}
             {selectedFolderId && examsError && <p className="text-sm text-red-600">{examsError}</p>}
             {selectedFolderId && !examsLoading && !examsError && (
@@ -417,7 +427,7 @@ export default function KhoDeChungClient() {
                 {exams.length === 0 ? (
                   <p className="text-sm text-gray-400">Nhánh này chưa có đề nào được chia sẻ.</p>
                 ) : (
-                  <ul className="divide-y divide-gray-100">
+                  <ul className="divide-y divide-gray-100 max-h-[70vh] overflow-y-auto thin-scroll pr-1">
                     {exams.map((e) => (
                       <li key={e._id} className="py-3 flex items-center justify-between gap-3">
                         <div className="min-w-0">
@@ -447,5 +457,6 @@ export default function KhoDeChungClient() {
         <ExamPreviewModal examId={previewExamId} onClose={() => setPreviewExamId(null)} onCloned={handleCloned} />
       )}
     </div>
+    </TeacherSidebar>
   );
 }

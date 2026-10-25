@@ -6,7 +6,7 @@ import { Exam } from '@/lib/examModel';
 import { SubmissionModel } from '@/lib/submissionModel';
 import { requireAdmin } from '@/lib/adminGuard';
 import { StudentAccountModel } from '@/lib/studentAccountModel';
-import { expireOverdueSubmissions } from '@/lib/expireOverdueSubmissions';
+import { expireOverdueSubmissions, expireOverdueFreeSubmissions } from '@/lib/expireOverdueSubmissions';
 
 // GET /api/admin/stats — thống kê tổng quan TOÀN HỆ THỐNG cho thẻ số liệu ở
 // đầu tab Quản trị (tổng GV, lớp, đề thi, bài nộp...). Chỉ admin gọi được,
@@ -25,14 +25,16 @@ export async function GET(request: NextRequest) {
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    // THÊM MỚI: "HS đang thi" toàn hệ thống. Trước khi đếm, chốt các lượt đã quá
+    // "HS đang thi" toàn hệ thống — GỒM CẢ thí sinh tự do/Ôn luyện (không có
+    // studentId, chỉ có studentAccountId). Trước khi đếm, chốt các lượt đã quá
     // giờ mà không nộp (cùng cơ chế trang chủ GV, xem expireOverdueSubmissions.ts)
-    // để con số không bị kẹt. Chỉ tính lượt gắn với 1 học sinh trong lớp
-    // (studentId có giá trị) — lượt "Ôn luyện" không có studentId chưa được
-    // tự chốt nên không đưa vào đây để khỏi đếm sai.
-    const liveFilter = { status: 'đang thi', studentId: { $exists: true, $ne: null } };
-    const liveStudentIds = await SubmissionModel.distinct('studentId', liveFilter);
-    await expireOverdueSubmissions(liveStudentIds);
+    // để số không bị kẹt. SỬA (25-10): trước đây chỉ đếm lượt có studentId nên
+    // thí sinh tự do không thấy, và lượt tự do kẹt 'đang thi' không bao giờ được chốt.
+    // Số liệu KHÔNG cần realtime — chỉ tính khi admin mở/làm mới tab Tổng quan.
+    const classFilter = { status: 'đang thi', studentId: { $exists: true, $ne: null } };
+    const freeFilter = { status: 'đang thi', $or: [{ studentId: null }, { studentId: { $exists: false } }] };
+    const liveStudentIds = await SubmissionModel.distinct('studentId', classFilter);
+    await Promise.all([expireOverdueSubmissions(liveStudentIds), expireOverdueFreeSubmissions()]);
 
     const [
       teacherCount,
@@ -43,7 +45,9 @@ export async function GET(request: NextRequest) {
       examCount,
       publishedExamCount,
       submissionCount,
-      liveExamCount,
+      liveClassCount,
+      liveFreeCount,
+      liveByExamRaw,
       studentAccountCount,
       activeTeachers7d,
       activeStudents7d,
@@ -59,11 +63,35 @@ export async function GET(request: NextRequest) {
       Exam.countDocuments(),
       Exam.countDocuments({ is_published: true }),
       SubmissionModel.countDocuments({ status: 'đã nộp' }),
-      SubmissionModel.countDocuments(liveFilter),
+      SubmissionModel.countDocuments(classFilter),
+      SubmissionModel.countDocuments(freeFilter),
+      // Top 8 đề đang có nhiều người làm nhất (gộp cả lớp + tự do) cho bảng nhỏ ở Tổng quan.
+      SubmissionModel.aggregate([
+        { $match: { status: 'đang thi' } },
+        {
+          $group: {
+            _id: '$examId',
+            total: { $sum: 1 },
+            free: { $sum: { $cond: [{ $ifNull: ['$studentId', false] }, 0, 1] } },
+          },
+        },
+        { $sort: { total: -1 } },
+        { $limit: 8 },
+      ]),
       StudentAccountModel.countDocuments(),
       TeacherModel.countDocuments({ lastLoginAt: { $gte: sevenDaysAgo } }),
       StudentAccountModel.countDocuments({ lastLoginAt: { $gte: sevenDaysAgo } }),
     ]);
+
+    const topExamIds = (liveByExamRaw as any[]).map((r) => r._id);
+    const topExams: any[] = topExamIds.length > 0 ? await Exam.find({ _id: { $in: topExamIds } }, { title: 1 }).lean() : [];
+    const titleMap = new Map(topExams.map((e) => [String(e._id), e.title]));
+    const liveByExam = (liveByExamRaw as any[]).map((r) => ({
+      examId: String(r._id),
+      title: titleMap.get(String(r._id)) || '(Đề đã bị xóa)',
+      total: r.total as number,
+      free: r.free as number,
+    }));
 
     return NextResponse.json(
       {
@@ -81,7 +109,11 @@ export async function GET(request: NextRequest) {
           examCount,
           publishedExamCount,
           submissionCount,
-          liveExamCount,
+          // Tổng = học sinh trong lớp + thí sinh tự do.
+          liveExamCount: liveClassCount + liveFreeCount,
+          liveClassCount,
+          liveFreeCount,
+          liveByExam,
           studentAccountCount,
           activeTeachers7d,
           activeStudents7d,

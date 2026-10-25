@@ -10,6 +10,7 @@
 
 import { useState, useEffect, type FormEvent, type ReactNode } from 'react';
 import ClassDetailPanel from './ClassDetailPanel';
+import { DEFAULT_EXAM_DURATION_MINUTES, DEFAULT_EXAM_MAX_ATTEMPTS } from '@/lib/examDefaults';
 
 // ---------- Kiểu dữ liệu, khớp đúng response API Phần 3a ----------
 
@@ -490,9 +491,9 @@ function AssignExamModal({
 
   const [useCustomSettings, setUseCustomSettings] = useState(false);
   const [customSettings, setCustomSettings] = useState<AssignSettings>({
-    duration: 45,
+    duration: DEFAULT_EXAM_DURATION_MINUTES,
     shuffle: false,
-    maxAttempts: 0,
+    maxAttempts: DEFAULT_EXAM_MAX_ATTEMPTS,
     showSolution: 'after_submit',
     solutionOpenAt: '',
     openAt: '',

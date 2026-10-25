@@ -31,25 +31,34 @@ const geistMono = Geist_Mono({
 // chung cho mọi trang, kể cả /thi/[examId]) — ảnh tĩnh nên luôn nhanh,
 // không phụ thuộc kết nối DB/font ngoài lúc Zalo/Messenger quét link, nên
 // không còn rủi ro bị bỏ qua ảnh vì quá thời gian chờ.
-const SLOGAN = 'Hệ thống thi trực tuyến';
-const BANNER_PATH = '/opengraph-image.png';
+const SLOGAN = 'Thi online · Ôn luyện';
+const BANNER_PATH = '/og-banner-v2.png'; // đổi tên file mỗi lần đổi logo để Zalo/Facebook bỏ cache cũ
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://thionline-ap.vercel.app'),
+  metadataBase: new URL(process.env.APP_URL?.trim() || 'https://thionline-ap.duckdns.org'),
   title: APP_NAME,
-  description: `${APP_NAME} — ${SLOGAN}`,
+  description: SLOGAN,
+  // ĐỔI LOGO (25-10): logo mới. /favicon.ico (src/app/favicon.ico) vẫn do Next
+  // tự phục vụ cho trình duyệt cũ. apple-touch-icon dùng khi "Thêm vào màn hình
+  // chính" trên iPhone; manifest (public/manifest.webmanifest) cho Android.
   icons: {
-    icon: "/logo.svg",
+    icon: [
+      { url: "/logo.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
+  manifest: "/manifest.webmanifest",
   openGraph: {
     title: APP_NAME,
     description: SLOGAN,
     siteName: APP_NAME,
     type: 'website',
-    images: [{ url: BANNER_PATH, width: 630, height: 280, alt: APP_NAME }],
+    images: [{ url: BANNER_PATH, width: 1200, height: 400, alt: APP_NAME }],
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: APP_NAME,
     description: SLOGAN,
     images: [BANNER_PATH],
@@ -61,6 +70,7 @@ export const metadata: Metadata = {
   // đứng yên ở bảng màu sáng, gây lệch tông rải rác khắp nơi.
   other: {
     'color-scheme': 'light',
+    google: 'notranslate',
   },
 };
 
@@ -71,10 +81,11 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="vi"
+      translate="no"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="notranslate min-h-full flex flex-col">{children}</body>
     </html>
   );
 }

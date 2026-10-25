@@ -126,6 +126,14 @@ export async function GET(request: NextRequest) {
           total: done ? s.total ?? null : null,
           scorePoints: done ? s.scorePoints ?? null : null,
           maxScorePoints: done ? s.maxScorePoints ?? null : null,
+          // Trạng thái chấm tự luận (nếu đề có Phần IV): để HS biết "chờ chấm"/"đã chấm".
+          essayState:
+            done && (s.essayMaxScore ?? 0) > 0 ? (s.essayGraded ? 'graded' : 'pending') : 'none',
+          essayScoreSum:
+            done && s.essayGraded
+              ? Math.round(Object.values(s.essayScores || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0) * 100) / 100
+              : 0,
+          essayMax: done && (s.essayMaxScore ?? 0) > 0 ? s.essayMaxScore : 0,
           attemptNumber: s.attemptNumber,
           canRetake: done ? canSelfRetake(effectiveSettings, s.attemptNumber) : false,
           assignedAt: s.assigned_at || null,

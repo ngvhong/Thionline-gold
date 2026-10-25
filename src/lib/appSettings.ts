@@ -72,6 +72,36 @@ export async function setRegistrationMode(mode: 'open' | 'approval' | 'closed'):
   );
 }
 
+// THÊM MỚI (25-10): có bắt buộc xác nhận email không. Được gọi trong
+// getSessionContext (MỌI request của GV chưa xác nhận) nên có cache ngắn 30
+// giây trong bộ nhớ để không đọc DB mỗi lần; set... xoá cache ngay trên
+// instance đang chạy (instance khác cập nhật trong vòng 30 giây). Chưa cấu hình
+// trong DB => false (không bắt buộc).
+let requireEmailVerificationCache: { value: boolean; at: number } | null = null;
+const REQUIRE_EMAIL_VERIFICATION_TTL_MS = 30_000;
+
+export async function getRequireEmailVerification(): Promise<boolean> {
+  const now = Date.now();
+  if (requireEmailVerificationCache && now - requireEmailVerificationCache.at < REQUIRE_EMAIL_VERIFICATION_TTL_MS) {
+    return requireEmailVerificationCache.value;
+  }
+  await connectToDatabase();
+  const doc: any = await AppSettingsModel.findById(SETTINGS_DOC_ID).lean();
+  const value = doc?.requireEmailVerification === true;
+  requireEmailVerificationCache = { value, at: now };
+  return value;
+}
+
+export async function setRequireEmailVerification(required: boolean): Promise<void> {
+  await connectToDatabase();
+  await AppSettingsModel.findByIdAndUpdate(
+    SETTINGS_DOC_ID,
+    { requireEmailVerification: required, updated_at: new Date() },
+    { upsert: true }
+  );
+  requireEmailVerificationCache = { value: required, at: Date.now() };
+}
+
 // Che bớt key khi hiển thị cho admin (KHÔNG BAO GIỜ trả nguyên key về
 // client sau khi đã lưu) — chỉ hiện vài ký tự đầu/cuối để admin nhận ra
 // đúng key mình đã lưu mà không lộ toàn bộ giá trị qua network/devtools.

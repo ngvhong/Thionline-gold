@@ -29,6 +29,8 @@ import { gradeExam, computeEssayMax, round2 } from '@/lib/grading';
 import { scrollFadeX } from '@/lib/scrollFade';
 import { AppLogoIcon } from '@/components/AppBranding';
 import EssayAnnotator from '@/components/EssayAnnotator';
+import { essayQuickValues } from '@/lib/essayQuickScores';
+import { DEFAULT_EXAM_DURATION_MINUTES, DEFAULT_EXAM_MAX_ATTEMPTS } from '@/lib/examDefaults';
 
 // ============================================================
 // ---------- Kiểu dữ liệu, khớp đúng response của API (xem GET/PUT
@@ -468,6 +470,7 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
   // khỏi `detail` để gõ số mượt (không phải load lại toàn bộ modal mỗi lần
   // gõ) — key = questionId.
   const [essayScoreInputs, setEssayScoreInputs] = useState<Record<string, string>>({});
+  const [essayCommentInputs, setEssayCommentInputs] = useState<Record<string, string>>({});
   const [savingEssayQuestion, setSavingEssayQuestion] = useState<string | null>(null);
   const [essayScoreErrors, setEssayScoreErrors] = useState<Record<string, string>>({});
   // Ảnh đang mở trong công cụ "Chấm trên ảnh" — null = đóng.
@@ -484,6 +487,7 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
         setEssayScoreInputs(
           Object.fromEntries(Object.entries(scores).map(([qid, v]) => [qid, String(v)]))
         );
+        setEssayCommentInputs({ ...(data.submission.essayComments || {}) });
       } catch (err: any) {
         setError(err.message || 'Không tải được bài làm.');
       } finally {
@@ -505,13 +509,13 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
       const res = await fetch(`/api/submissions/${submissionId}/essay-score`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questionId, score: value }),
+        body: JSON.stringify({ questionId, score: value, comment: essayCommentInputs[questionId] ?? '' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Không lưu được điểm.');
       setDetail((prev: any) => ({
         ...prev,
-        submission: { ...prev.submission, essayScores: data.essayScores, essayGraded: data.essayGraded },
+        submission: { ...prev.submission, essayScores: data.essayScores, essayGraded: data.essayGraded, essayComments: data.essayComments },
       }));
     } catch (err: any) {
       setEssayScoreErrors((prev) => ({ ...prev, [questionId]: err.message || 'Không lưu được điểm.' }));
@@ -669,7 +673,7 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
                                       <button
                                         type="button"
                                         onClick={() => setAnnotating({ questionId: q.id, imageIndex: idx, url: displayUrl })}
-                                        title="Bấm để chấm trên ảnh (bút đỏ)"
+                                        title="Bấm để chấm trên ảnh"
                                         className="block"
                                       >
                                         <img
@@ -693,6 +697,27 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
                               <p className="text-xs text-gray-400 italic mb-3">Học sinh chưa nộp ảnh câu này.</p>
                             )}
 
+                            <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                              <span className="text-xs text-gray-500">Chấm nhanh:</span>
+                              {essayQuickValues(essayQuestions.length ? essayMaxScore / essayQuestions.length : 1).map((v) => (
+                                <button
+                                  key={v}
+                                  type="button"
+                                  onClick={() => setEssayScoreInputs((prev) => ({ ...prev, [q.id]: String(v) }))}
+                                  className="text-xs px-2 py-0.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50"
+                                >
+                                  {v}
+                                </button>
+                              ))}
+                            </div>
+                            <input
+                              type="text"
+                              maxLength={500}
+                              placeholder="Nhận xét cho học sinh (không bắt buộc)"
+                              value={essayCommentInputs[q.id] ?? ''}
+                              onChange={(e) => setEssayCommentInputs((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                            />
                             <div className="flex items-center gap-2 flex-wrap">
                               <label className="text-xs font-medium text-gray-600">Điểm câu {i + 1}:</label>
                               <input
@@ -1076,9 +1101,9 @@ function AssignExamPanel({
   const [examDefaultSettings, setExamDefaultSettings] = useState<any>({});
   const [useCustomSettings, setUseCustomSettings] = useState(false);
   const [customSettings, setCustomSettings] = useState({
-    duration: 45,
+    duration: DEFAULT_EXAM_DURATION_MINUTES,
     shuffle: false,
-    maxAttempts: 0,
+    maxAttempts: DEFAULT_EXAM_MAX_ATTEMPTS,
     showSolution: 'after_submit' as 'after_submit' | 'never' | 'after_close' | 'custom_time',
     solutionOpenAt: '',
     openAt: '',

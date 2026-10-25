@@ -63,6 +63,7 @@ export async function GET(
           essayImages: submission.essayImages || null,
           essayAnnotatedImages: submission.essayAnnotatedImages || null,
           essayScores: submission.essayScores || null,
+          essayComments: submission.essayComments || null,
           essayMaxScore: submission.essayMaxScore ?? null,
           essayGraded: !!submission.essayGraded,
           started_at: submission.started_at || null,

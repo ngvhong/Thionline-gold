@@ -124,6 +124,12 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // 25-10: ĐỀ MỚI LÊN ĐẦU — xếp theo ngày xuất bản (published_at, lúc đề được
+    // chia sẻ/đăng), thiếu thì theo ngày tạo. Trước đây chỉ theo created_at nên đề
+    // tạo từ lâu nhưng MỚI chia sẻ lại nằm cuối danh sách.
+    const stamp = (x: any) => new Date(x.published_at || x.created_at || 0).getTime() || 0;
+    result.sort((a: any, b: any) => stamp(b) - stamp(a));
+
     return NextResponse.json({ exams: result }, { status: 200 });
   } catch (err) {
     console.error('Lỗi tải danh sách đề trong kho đề chung:', err);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { renderExamText, buildTikzSvgMap, buildImageUrlMap } from '@/lib/examRender';
 import { gradeExam, computeEssayMax, type P1Answers, type P2Answers, type TextAnswers, type ScoringSettings } from '@/lib/grading';
 import { scrollFadeX } from '@/lib/scrollFade';
@@ -174,6 +174,7 @@ export default function StudentTakeExam({
   endAt,
   onSubmitted,
   previewMode = false,
+  hideEssay = false,
   onExit,
 }: {
   examId: string;
@@ -245,6 +246,9 @@ export default function StudentTakeExam({
   // trái để thoát khỏi màn xem trước — học sinh thi thật (không có onExit)
   // sẽ không bao giờ thấy nút này.
   previewMode?: boolean;
+  // THÊM MỚI: true ở khu Ôn luyện (tự luyện) — ẩn phần chụp/tải ảnh Phần IV vì
+  // không có giáo viên chấm; học sinh làm tự luận vào vở rồi đối chiếu lời giải.
+  hideEssay?: boolean;
   onExit?: () => void;
 }) {
   const tikzSvgMap = useMemo(() => buildTikzSvgMap(rawData?.tikz_list), [rawData]);
@@ -644,8 +648,19 @@ export default function StudentTakeExam({
     }
   }, [urgency]);
 
+  // THÊM MỚI (25-10, thiết kế lại khung tiêu đề đề thi): bảng màu theo mức
+  // khẩn cấp. Giữ nguyên tín hiệu màu xanh -> cam -> đỏ như cũ NHƯNG dùng
+  // tông ĐẬM hơn (amber-800 / red-800) để chữ trắng luôn đủ tương phản —
+  // nền amber-500 cũ chỉ đạt ~2:1 với chữ trắng, khó đọc.
+  const titleTheme =
+    urgency === 'red'
+      ? { from: '#7f1d1d', to: '#be123c', accent: '#fecdd3' }
+      : urgency === 'amber'
+      ? { from: '#78350f', to: '#b45309', accent: '#fde68a' }
+      : { from: '#172554', to: '#3730a3', accent: '#bfdbfe' };
+
   return (
-    <div className="max-w-3xl mx-auto pb-16 pt-4">
+    <div className="max-w-[210mm] mx-auto pb-16 pt-4 md:bg-white md:border md:border-gray-200 md:shadow-[0_2px_24px_rgba(15,23,42,0.12)] md:rounded-sm md:px-10 md:pt-8 md:my-6 print:shadow-none">
       {/* THANH TIÊU ĐỀ — SỬA (khiếu nại: "để tiêu đề đề thi phía trên thanh
           Phần I/II/III... không neo/ghim cố định như vậy nữa"): TRƯỚC ĐÂY
           thanh này `position: fixed` ghim cứng mép trên viewport, đè lên nội
@@ -654,16 +669,60 @@ export default function StudentTakeExam({
           nội dung, phía trên thanh mục lục Phần I/II/III..., cuộn trang thì
           tiêu đề cuộn theo như mọi phần tử khác, không còn ghim/neo gì cả. */}
       {examTitle && (
+        // THIẾT KẾ LẠI (25-10: "thiết kế khung tiêu đề đề thi thẩm mỹ hơn"):
+        // ý tưởng "tờ giấy kẻ ô của môn Toán" — nền tối sâu, lưới ô vuông mờ
+        // tan dần ra mép, 1 đường cong hàm số mảnh chạy ngang, và trục hoành
+        // có vạch chia ở mép dưới (tiêu đề đứng "trên trục"). Điểm nhấn duy
+        // nhất là đường cong + trục; mọi thứ khác giữ yên. Trang trí đều
+        // aria-hidden/pointer-events-none, không ảnh hưởng thao tác. Tiêu đề
+        // dài tự xuống tối đa 2 dòng (trước đây bị cắt "..." 1 dòng).
         <div
-          className={`flex items-center justify-center text-center px-4 py-3 mb-3 rounded-xl border shadow-md transition-colors bg-gradient-to-r ${
-            urgency === 'red'
-              ? 'from-red-600 to-rose-600 border-red-700'
-              : urgency === 'amber'
-              ? 'from-amber-500 to-orange-500 border-amber-600'
-              : 'from-blue-600 to-indigo-600 border-blue-700'
-          }`}
+          className="relative overflow-hidden rounded-xl mb-4 px-5 pt-5 pb-8 sm:px-10 sm:pt-7 sm:pb-9 text-center shadow-[0_8px_24px_-10px_rgba(23,37,84,0.6)] ring-1 ring-black/10 print:shadow-none"
+          style={{ backgroundImage: `linear-gradient(135deg, ${titleTheme.from}, ${titleTheme.to})` }}
         >
-          <h1 className="font-bold text-white text-sm sm:text-base leading-snug truncate max-w-full drop-shadow-sm">{examTitle}</h1>
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage:
+                'linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px)',
+              backgroundSize: '24px 24px',
+              backgroundPosition: 'center',
+              WebkitMaskImage: 'radial-gradient(ellipse at center, #000 25%, transparent 85%)',
+              maskImage: 'radial-gradient(ellipse at center, #000 25%, transparent 85%)',
+            }}
+          />
+          <svg
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            viewBox="0 0 600 120"
+            preserveAspectRatio="none"
+          >
+            <path
+              d="M0 84 C 70 84, 95 24, 160 24 S 235 100, 300 100 S 385 32, 455 32 S 540 76, 600 62"
+              fill="none"
+              stroke={titleTheme.accent}
+              strokeOpacity="0.4"
+              strokeWidth="1.5"
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+          <h1
+            className="relative text-white font-bold text-lg sm:text-2xl leading-snug tracking-tight break-words line-clamp-2 drop-shadow-sm"
+            style={{ textWrap: 'balance' } as CSSProperties}
+          >
+            {examTitle}
+          </h1>
+          <div
+            aria-hidden="true"
+            className="absolute left-0 right-0 bottom-0 h-3 border-t border-white/40 pointer-events-none"
+            style={{
+              backgroundImage: 'linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)',
+              backgroundSize: '24px 6px',
+              backgroundRepeat: 'repeat-x',
+              backgroundPosition: 'center top',
+            }}
+          />
         </div>
       )}
 
@@ -725,6 +784,30 @@ export default function StudentTakeExam({
         <ClockIcon className="w-3.5 h-3.5" />
       </button>
 
+      {/* THÊM MỚI (25-10): CẢNH BÁO SẮP HẾT GIỜ — nút tròn ở trên vẫn là cách
+          duy nhất xem giờ/danh sách câu/nộp bài lúc bình thường (không thêm
+          thanh nào chiếm chỗ). Riêng khi CÒN ≤ 5 PHÚT (urgency amber/red), hiện
+          thêm 1 đồng hồ nhỏ mm:ss ngay bên TRÁI nút tròn, cùng độ cao, để học
+          sinh thấy giờ mà không cần mở bảng. ≤ 1 phút chuyển đỏ + nhịp tim
+          (dùng chung animation .anchor-heartbeat với nút tròn).
+          pointer-events-none: chỉ để nhìn, không chặn chạm vào nội dung bài
+          bên dưới. Mốc 5 phút/1 phút lấy từ `urgency` (cùng nguồn với màu
+          nút tròn và thanh tiêu đề) nên 3 chỗ luôn đổi màu cùng lúc. */}
+      {urgency !== 'normal' && (
+        <div
+          role="timer"
+          aria-label={`Còn ${mm} phút ${ss} giây`}
+          className={`fixed z-30 pointer-events-none flex items-center justify-center rounded-full border bg-white/95 shadow-sm px-2 font-mono font-bold text-xs leading-none tabular-nums ${
+            urgency === 'red'
+              ? 'anchor-heartbeat border-red-400 text-red-600'
+              : 'border-amber-400 text-amber-700'
+          }`}
+          style={{ top: 'calc(1cm - 1.9rem)', right: '0.35rem', height: '1.6rem' }}
+        >
+          {mm}:{ss}
+        </div>
+      )}
+
       {/* Bong bóng chú thích đi kèm vòng sáng lan toả — CHỈ hiện cùng lúc với
           gợi ý (showAnchorHint), tự ẩn theo cùng điều kiện (bấm neo hoặc hết
           7s). Đặt lệch xuống dưới-trái neo (neo ở góc trên-phải) để không
@@ -736,10 +819,10 @@ export default function StudentTakeExam({
           style={{ top: 'calc(1cm + 2.5rem)', right: '0.35rem' }}
         >
           <div
-            className="ml-auto mr-2.5 mb-[-3px] w-2.5 h-2.5 bg-gray-900 rotate-45 relative z-10"
+            className="ml-auto mr-2.5 mb-[-3px] w-2.5 h-2.5 bg-[#8B2F1F] rotate-45 relative z-10"
             aria-hidden="true"
           />
-          <div className="inline-block bg-gray-900 text-white text-[11px] leading-snug rounded-lg px-2.5 py-2 shadow-lg text-left relative">
+          <div className="inline-block bg-[#8B2F1F] text-white text-[11px] leading-snug rounded-lg px-2.5 py-2 shadow-lg text-left relative">
             Bấm vào đây để xem giờ, danh sách câu và nộp bài
           </div>
         </div>
@@ -897,7 +980,7 @@ export default function StudentTakeExam({
                   type="button"
                   onClick={() => setFlagged((prev) => ({ ...prev, [q.id]: !prev[q.id] }))}
                   title={flagged[q.id] ? 'Bỏ đánh dấu' : 'Đánh dấu để xem lại'}
-                  className={`shrink-0 flex items-center justify-center px-1 py-0.5 rounded-md transition ${
+                  className={`shrink-0 flex items-center justify-center p-2.5 -m-2 rounded-md transition ${
                     flagged[q.id] ? 'text-amber-500' : 'text-gray-300 hover:text-gray-400'
                   }`}
                 >
@@ -949,7 +1032,7 @@ export default function StudentTakeExam({
                   type="button"
                   onClick={() => setFlagged((prev) => ({ ...prev, [q.id]: !prev[q.id] }))}
                   title={flagged[q.id] ? 'Bỏ đánh dấu' : 'Đánh dấu để xem lại'}
-                  className={`shrink-0 flex items-center justify-center px-1 py-0.5 rounded-md transition ${
+                  className={`shrink-0 flex items-center justify-center p-2.5 -m-2 rounded-md transition ${
                     flagged[q.id] ? 'text-amber-500' : 'text-gray-300 hover:text-gray-400'
                   }`}
                 >
@@ -976,7 +1059,7 @@ export default function StudentTakeExam({
                           + text-xs trước đây). Từ sm trở lên (đã đủ rộng,
                           landscape/tablet vẫn ổn) giữ nguyên 2 nút nhỏ cạnh
                           chữ như cũ. */}
-                      <div className="flex sm:hidden w-full h-7 rounded-lg border border-gray-300 overflow-hidden">
+                      <div className="flex sm:hidden w-full h-11 rounded-lg border border-gray-300 overflow-hidden">
                         <button
                           onClick={() =>
                             setP2Answers((prev) => ({
@@ -984,7 +1067,7 @@ export default function StudentTakeExam({
                               [q.id]: { ...(prev[q.id] || {}), [opt._origIdx]: true },
                             }))
                           }
-                          className={`flex-1 h-full flex items-center justify-center text-xs font-semibold transition ${
+                          className={`flex-1 h-full flex items-center justify-center text-sm font-semibold transition ${
                             val === true ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500 active:bg-gray-200'
                           }`}
                         >
@@ -997,7 +1080,7 @@ export default function StudentTakeExam({
                               [q.id]: { ...(prev[q.id] || {}), [opt._origIdx]: false },
                             }))
                           }
-                          className={`flex-1 h-full flex items-center justify-center text-xs font-semibold transition border-l border-gray-300 ${
+                          className={`flex-1 h-full flex items-center justify-center text-sm font-semibold transition border-l border-gray-300 ${
                             val === false ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-500 active:bg-gray-200'
                           }`}
                         >
@@ -1012,7 +1095,7 @@ export default function StudentTakeExam({
                               [q.id]: { ...(prev[q.id] || {}), [opt._origIdx]: true },
                             }))
                           }
-                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition ${
+                          className={`text-sm font-semibold px-4 py-2.5 rounded-lg transition ${
                             val === true ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                           }`}
                         >
@@ -1025,7 +1108,7 @@ export default function StudentTakeExam({
                               [q.id]: { ...(prev[q.id] || {}), [opt._origIdx]: false },
                             }))
                           }
-                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition ${
+                          className={`text-sm font-semibold px-4 py-2.5 rounded-lg transition ${
                             val === false ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                           }`}
                         >
@@ -1051,7 +1134,7 @@ export default function StudentTakeExam({
                   type="button"
                   onClick={() => setFlagged((prev) => ({ ...prev, [q.id]: !prev[q.id] }))}
                   title={flagged[q.id] ? 'Bỏ đánh dấu' : 'Đánh dấu để xem lại'}
-                  className={`shrink-0 flex items-center justify-center px-1 py-0.5 rounded-md transition ${
+                  className={`shrink-0 flex items-center justify-center p-2.5 -m-2 rounded-md transition ${
                     flagged[q.id] ? 'text-amber-500' : 'text-gray-300 hover:text-gray-400'
                   }`}
                 >
@@ -1066,7 +1149,7 @@ export default function StudentTakeExam({
                 value={textAnswers[q.id] || ''}
                 onChange={(e) => setTextAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
                 placeholder="Nhập đáp số..."
-                className="w-[120px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className="w-[140px] border border-gray-300 rounded-lg px-3 py-2 text-base font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
               />
             </div>
           ))}
@@ -1077,8 +1160,9 @@ export default function StudentTakeExam({
         <div id="section-p4" className="space-y-4 mt-8 scroll-mt-28">
           <h2 className="font-bold text-slate-800 text-[15px] px-4 py-2.5 bg-slate-200 border border-slate-300 rounded-lg">{partitionLabel.p4} ({partitionCount.p4})</h2>
           <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-lg px-3 py-2">
-            Làm bài trên giấy, chụp ảnh hoặc chọn ảnh đã chụp cho từng câu. Giáo viên sẽ chấm tay
-            phần này sau khi em nộp bài — điểm hiển thị lúc nộp KHÔNG bao gồm Phần IV.
+            {hideEssay
+              ? 'Phần này không nộp bài trong khu Ôn luyện (không có giáo viên chấm). Em làm vào vở, rồi đối chiếu lời giải sau khi nộp bài.'
+              : 'Làm bài trên giấy, chụp ảnh hoặc chọn ảnh đã chụp cho từng câu. Giáo viên sẽ chấm tay phần này sau khi em nộp bài — điểm hiển thị lúc nộp KHÔNG bao gồm Phần IV.'}
           </div>
           {(data.phan_4_TuLuan || []).map((q: any, i: number) => {
             const images = essayImages[q.id] || [];
@@ -1091,7 +1175,7 @@ export default function StudentTakeExam({
                     type="button"
                     onClick={() => setFlagged((prev) => ({ ...prev, [q.id]: !prev[q.id] }))}
                     title={flagged[q.id] ? 'Bỏ đánh dấu' : 'Đánh dấu để xem lại'}
-                    className={`shrink-0 flex items-center justify-center px-1 py-0.5 rounded-md transition ${
+                    className={`shrink-0 flex items-center justify-center p-2.5 -m-2 rounded-md transition ${
                       flagged[q.id] ? 'text-amber-500' : 'text-gray-300 hover:text-gray-400'
                     }`}
                   >
@@ -1102,7 +1186,7 @@ export default function StudentTakeExam({
                   <span className="text-blue-700 font-bold">Câu {i + 1}:</span> {renderExamText(q.content, tikzSvgMap, `p4-${q.id}-c`, imageUrlMap, settings.imageScalePercent ?? 100)}
                 </div>
 
-                {images.length > 0 && (
+                {!hideEssay && images.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-3">
                     {images.map((url, idx) => (
                       <div key={url} className="relative">
@@ -1142,6 +1226,7 @@ export default function StudentTakeExam({
                     chọn "Chụp ảnh mới" ngay bên trong, nhẹ hơn hẳn so với ép mở
                     thẳng app Camera riêng, ít bị hệ điều hành kill tiến trình
                     hơn), hoặc chọn ảnh đã có sẵn trong Thư viện ảnh. */}
+                {!hideEssay && (<>
                 <label
                   htmlFor={inputId}
                   onClick={suppressLeaveWarningForImagePicker}
@@ -1166,6 +1251,7 @@ export default function StudentTakeExam({
                   }}
                 />
                 {essayError[q.id] && <p className="text-xs text-red-600 mt-2">{essayError[q.id]}</p>}
+                </>)}
               </div>
             );
           })}
@@ -1212,7 +1298,7 @@ export default function StudentTakeExam({
                 {
                   key: 'p4',
                   label: partitionLabel.p4,
-                  items: data.phan_4_TuLuan || [],
+                  items: hideEssay ? [] : data.phan_4_TuLuan || [],
                   attemptedById: Object.fromEntries(
                     (data.phan_4_TuLuan || []).map((q: any) => [q.id, (essayImages[q.id] || []).length > 0])
                   ),

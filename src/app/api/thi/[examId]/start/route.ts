@@ -110,6 +110,8 @@ export async function POST(
           essayGraded: !!submission.essayGraded,
           essayImages: submission.essayImages || null,
           essayAnnotatedImages: submission.essayAnnotatedImages || null,
+          essayComments: submission.essayComments || null,
+          essayQuestionIds: ((exam as any).raw_data?.phan_4_TuLuan || []).map((q: any) => q.id),
           showSolution,
           // THÊM MỚI (26-7, "tuỳ chọn chỉnh size hình"): TRƯỚC ĐÂY nhánh này
           // (mở lại link sau khi đã nộp) không hề trả `settings`, nên

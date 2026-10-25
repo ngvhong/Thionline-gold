@@ -38,6 +38,8 @@ type LibraryExamRow = {
   title: string;
   teacherName: string;
   questionCount: number;
+  created_at?: string | null;
+  published_at?: string | null;
   bestScorePoints: number | null;
   bestMaxScorePoints: number | null;
   attempts: number;
@@ -167,6 +169,7 @@ function PracticeExamRunner({ examId, onBack }: { examId: string; onBack: () => 
             rawData={session.raw_data}
             settings={session.settings}
             endAt={session.endAt}
+            hideEssay
             onSubmitted={(r) => {
               setResult(r);
               setShowSolutionView(false);
@@ -280,6 +283,8 @@ export default function LibraryPracticeTab({
   const [examsError, setExamsError] = useState('');
 
   const [runningExamId, setRunningExamId] = useState<string | null>(null);
+  // 25-10: ô tìm trong danh sách đề của thư mục đang mở (chỉ hiện khi > 8 đề).
+  const [examQuery, setExamQuery] = useState('');
 
   async function loadTree() {
     setTreeLoading(true);
@@ -314,6 +319,7 @@ export default function LibraryPracticeTab({
   }
 
   useEffect(() => {
+    setExamQuery('');
     if (currentParentId) loadExams(currentParentId);
     else setExams([]);
   }, [currentParentId]);
@@ -376,7 +382,7 @@ export default function LibraryPracticeTab({
       )}
 
       {/* Breadcrumb */}
-      <div className="flex items-center flex-wrap gap-1 text-xs text-gray-500 mb-2">
+      <div className="flex items-center flex-wrap gap-x-1 gap-y-0 text-sm text-gray-500 mb-2 [&_button]:py-2">
         <button type="button" onClick={() => setPath([])} className="hover:text-blue-600 hover:underline">
           Kho đề
         </button>
@@ -399,6 +405,9 @@ export default function LibraryPracticeTab({
 
       {!treeLoading && !treeError && (
         <>
+          {children.length > 0 && !currentParentId && (
+            <p className="text-xs text-gray-500 mb-2">Bấm vào một thư mục để mở và xem các đề bên trong.</p>
+          )}
           {children.length > 0 && (
             <ul className="space-y-1.5 mb-3">
               {children
@@ -419,6 +428,11 @@ export default function LibraryPracticeTab({
                           <span className="text-xs text-gray-400">{total} đề</span>
                         ) : null;
                       })()}
+                      {/* 25-10: mũi tên ">" rõ ràng bên phải = "bấm để mở thư mục này"
+                          (trước đây hàng thư mục không có dấu hiệu gì là bấm được). */}
+                      <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 shrink-0 text-gray-400" aria-hidden="true">
+                        <path d="m9 6 6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
                     </button>
                   </li>
                 ))}
@@ -436,15 +450,37 @@ export default function LibraryPracticeTab({
                       <p className="text-sm text-gray-400 text-center py-4">Mục này chưa có đề nào.</p>
                     )
                   ) : (
-                    <ul className="space-y-1.5">
-                      {exams.map((e) => (
+                    <>
+                    {exams.length > 8 && (
+                      <input
+                        type="search"
+                        value={examQuery}
+                        onChange={(ev) => setExamQuery(ev.target.value)}
+                        placeholder={`Tìm trong ${exams.length} đề…`}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-base outline-none focus:border-blue-400 mb-2"
+                      />
+                    )}
+                    {/* Khung cuộn riêng (thanh mảnh) khi có nhiều đề; đề MỚI nhất nằm trên cùng
+                        (API đã sắp theo ngày xuất bản giảm dần). */}
+                    <ul className="space-y-1.5 max-h-[60vh] overflow-y-auto thin-scroll pr-1">
+                      {exams
+                        .filter((e) => !examQuery.trim() || e.title.toLowerCase().includes(examQuery.trim().toLowerCase()))
+                        .map((e) => (
                         <li key={e._id}>
                           <button
                             type="button"
                             onClick={() => handleTapExam(e._id)}
                             className="w-full text-left px-3 py-2.5 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-200 transition"
                           >
-                            <p className="text-sm font-semibold text-gray-800">{e.title}</p>
+                            <p className="text-sm font-semibold text-gray-800">
+                              {e.title}
+                              {(() => {
+                                const t = new Date(e.published_at || e.created_at || 0).getTime();
+                                return t && Date.now() - t < 14 * 24 * 3600 * 1000 ? (
+                                  <span className="ml-1.5 align-middle text-[10px] font-bold text-white bg-red-500 rounded px-1.5 py-0.5">MỚI</span>
+                                ) : null;
+                              })()}
+                            </p>
                             <p className="text-xs text-gray-400">
                               GV {e.teacherName} · {e.questionCount} câu
                               {e.attempts > 0 && (
@@ -457,6 +493,7 @@ export default function LibraryPracticeTab({
                         </li>
                       ))}
                     </ul>
+                    </>
                   )}
                 </>
               )}

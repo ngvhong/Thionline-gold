@@ -84,6 +84,9 @@ const SubmissionSchema = new mongoose.Schema({
   // với phan_4_TuLuan tại thời điểm chấm) — dùng để quyết định có cộng
   // essayScores vào tổng điểm hiển thị/xuất Excel hay chưa.
   essayGraded: { type: Boolean, default: false },
+  // Nhận xét chữ của GV cho từng câu Phần IV: { [questionId]: string } — học
+  // sinh xem lại cùng điểm và ảnh đã chấm.
+  essayComments: { type: Object, required: false },
 
   // XÁC NHẬN: GV được phép cho học sinh làm lại lần 2, 3... khi có sự cố
   // (mất mạng, nộp nhầm...). Vì vậy KHÔNG còn ràng buộc 1 học sinh - 1 đề =

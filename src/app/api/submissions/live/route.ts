@@ -6,7 +6,7 @@ import { StudentModel } from '@/lib/studentModel';
 import { SubmissionModel } from '@/lib/submissionModel';
 import { Exam } from '@/lib/examModel';
 import { getVerifiedTeacherIdFromRequest } from '@/lib/auth';
-import { expireOverdueSubmissions } from '@/lib/expireOverdueSubmissions';
+import { expireOverdueSubmissions, computeLiveEndTimes } from '@/lib/expireOverdueSubmissions';
 
 // GET /api/submissions/live
 //   → THÊM MỚI (GV yêu cầu 29-8: "muốn nhìn 1 danh sách biết HS nào đang
@@ -24,8 +24,18 @@ import { expireOverdueSubmissions } from '@/lib/expireOverdueSubmissions';
 // expireOverdueSubmissions tự chốt lượt đó (0 điểm, autoSubmitted) nên dòng
 // biến mất, KHÔNG còn kẹt vĩnh viễn như trước. Muốn biết chắc HS còn đang mở
 // bài trong khoảng giờ đó cần heartbeat riêng — chưa làm.
+//
+// SỬA (25-10): (1) ẨN NGAY lượt đã hết giờ làm bài (started_at + duration) — trước
+// đây phải chờ thêm 5 phút chừa mới được tự chốt trong DB mới biến mất, và các
+// trường hợp không chốt được (đề xoá...) thì hiện mãi. Nay API tự lọc theo giờ
+// hết hạn tính cho từng lượt, dù DB đã chốt hay chưa. (2) ?countOnly=1 chỉ trả
+// tổng số (nhẹ, dùng cho tiêu đề khi danh sách đang gập). (3) Danh sách tối đa
+// MAX_LIST em (kèm `total` thật) để lớp ~1000 em không làm phình response.
+const MAX_LIST = 500;
+
 export async function GET(request: NextRequest) {
   try {
+    const countOnly = request.nextUrl.searchParams.get('countOnly') === '1';
     const teacherId = await getVerifiedTeacherIdFromRequest(request);
     if (!teacherId) {
       return NextResponse.json({ error: 'Bạn chưa đăng nhập.' }, { status: 401 });
@@ -36,7 +46,7 @@ export async function GET(request: NextRequest) {
     // Chỉ lấy lớp thuộc đúng GV này — không được thấy HS đang thi của GV khác.
     const myClasses = await ClassModel.find({ ownerId: teacherId }, { name: 1 }).lean();
     if (myClasses.length === 0) {
-      return NextResponse.json({ liveStudents: [] }, { status: 200 });
+      return NextResponse.json({ liveStudents: [], total: 0 }, { status: 200 });
     }
     const classIds = myClasses.map((c: any) => c._id);
     const classNameMap = new Map(myClasses.map((c: any) => [String(c._id), c.name]));
@@ -46,7 +56,7 @@ export async function GET(request: NextRequest) {
       { name: 1, classId: 1 }
     ).lean();
     if (myStudents.length === 0) {
-      return NextResponse.json({ liveStudents: [] }, { status: 200 });
+      return NextResponse.json({ liveStudents: [], total: 0 }, { status: 200 });
     }
     const studentIds = myStudents.map((s: any) => s._id);
     const studentMap = new Map(
@@ -75,14 +85,30 @@ export async function GET(request: NextRequest) {
     ]);
 
     if (liveSubmissions.length === 0) {
-      return NextResponse.json({ liveStudents: [] }, { status: 200 });
+      return NextResponse.json({ liveStudents: [], total: 0 }, { status: 200 });
     }
 
-    const examIds = [...new Set(liveSubmissions.map((s: any) => String(s.examId)))];
+    // Ẩn ngay những lượt đã quá giờ làm bài (kể cả chưa được chốt trong DB).
+    const endTimes = await computeLiveEndTimes(liveSubmissions);
+    const nowMs = Date.now();
+    const stillLive = liveSubmissions.filter((s: any) => {
+      const info = endTimes.get(String(s._id));
+      return !!info && info.endMs !== null && info.endMs > nowMs;
+    });
+    const total = stillLive.length;
+    if (countOnly) {
+      return NextResponse.json({ liveStudents: [], total }, { status: 200 });
+    }
+    if (total === 0) {
+      return NextResponse.json({ liveStudents: [], total: 0 }, { status: 200 });
+    }
+    const shown = stillLive.slice(0, MAX_LIST);
+
+    const examIds = [...new Set(shown.map((s: any) => String(s.examId)))];
     const exams = await Exam.find({ _id: { $in: examIds } }, { title: 1 }).lean();
     const examTitleMap = new Map(exams.map((e: any) => [String(e._id), e.title]));
 
-    const liveStudents = liveSubmissions
+    const liveStudents = shown
       .map((s: any) => {
         const student = studentMap.get(String(s.studentId));
         if (!student) return null; // học sinh đã bị xóa sau khi giao đề — bỏ qua
@@ -93,11 +119,12 @@ export async function GET(request: NextRequest) {
           examId: String(s.examId),
           examTitle: examTitleMap.get(String(s.examId)) || '(Đề đã bị xóa)',
           started_at: s.started_at || null,
+          endAt: endTimes.get(String(s._id))?.endMs ?? null,
         };
       })
       .filter(Boolean);
 
-    return NextResponse.json({ liveStudents }, { status: 200 });
+    return NextResponse.json({ liveStudents, total, truncated: total > shown.length }, { status: 200 });
   } catch (err) {
     console.error('Lỗi lấy danh sách học sinh đang thi:', err);
     return NextResponse.json(

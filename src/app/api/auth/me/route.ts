@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        teacher: { id: teacher._id.toString(), email: teacher.email, name: teacher.name, emailVerified: !!teacher.emailVerified },
+        teacher: { id: teacher._id.toString(), email: teacher.email, name: teacher.name, emailVerified: ctx.emailVerified },
         impersonating,
         planStatus,
       },

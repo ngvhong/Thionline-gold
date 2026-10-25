@@ -345,8 +345,8 @@ function StudentHome({
   }
 
   return (
-    <div className="w-full max-w-md text-left">
-      <div className="flex items-center justify-between mb-4">
+    <div className="w-full text-left">
+      <div className="flex items-center justify-between mb-3">
         <div>
           <p className="font-semibold text-gray-800">{account.name}</p>
           <p className="text-xs text-gray-400">{account.phone}</p>
@@ -354,7 +354,7 @@ function StudentHome({
         <button
           type="button"
           onClick={handleLogout}
-          className="text-xs text-gray-500 hover:text-red-600 border border-gray-300 hover:border-red-300 rounded-lg px-3 py-1.5"
+          className="text-sm text-gray-500 hover:text-red-600 border border-gray-300 hover:border-red-300 rounded-lg px-4 py-2.5"
         >
           Đăng xuất
         </button>
@@ -364,7 +364,7 @@ function StudentHome({
         <button
           type="button"
           onClick={() => setTab('assigned')}
-          className={`flex-1 py-1.5 rounded-md transition-colors ${
+          className={`flex-1 py-2.5 rounded-md transition-colors ${
             tab === 'assigned' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'
           }`}
         >
@@ -373,7 +373,7 @@ function StudentHome({
         <button
           type="button"
           onClick={() => setTab('library')}
-          className={`flex-1 py-1.5 rounded-md transition-colors ${
+          className={`flex-1 py-2.5 rounded-md transition-colors ${
             tab === 'library' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'
           }`}
         >
@@ -493,13 +493,29 @@ export default function StudentApp() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm bg-white border border-gray-200 rounded-xl shadow-sm p-7 text-center">
-        <p className="flex items-center justify-center gap-2.5 font-bold text-blue-600 text-2xl tracking-tight mb-1">
-          <AppLogoIcon className="w-10 h-10 shrink-0" />
-          {APP_NAME}
-        </p>
-        <p className="text-sm text-gray-400 mb-6">Cổng học sinh</p>
+    <div className={`min-h-screen bg-gray-50 flex justify-center p-3 sm:p-4 ${account ? 'items-start' : 'items-center'}`}>
+      <div
+        className={`w-full bg-white border border-gray-200 rounded-xl shadow-sm text-center ${
+          account ? 'max-w-md md:max-w-2xl p-4 sm:p-6 sm:mt-6' : 'max-w-sm p-7'
+        }`}
+      >
+        {/* 25-10: khi đã đăng nhập, đầu trang gọn 1 hàng (logo + tên + "Cổng học sinh")
+            để nhường chỗ cho danh sách đề; chưa đăng nhập giữ bố cục cũ. */}
+        {account ? (
+          <p className="flex items-center gap-2 font-bold text-blue-600 text-lg tracking-tight mb-3 text-left">
+            <AppLogoIcon className="w-8 h-8 shrink-0" />
+            {APP_NAME}
+            <span className="text-xs font-normal text-gray-400">· Cổng học sinh</span>
+          </p>
+        ) : (
+          <>
+            <p className="flex items-center justify-center gap-2.5 font-bold text-blue-600 text-2xl tracking-tight mb-1">
+              <AppLogoIcon className="w-10 h-10 shrink-0" />
+              {APP_NAME}
+            </p>
+            <p className="text-sm text-gray-400 mb-6">Cổng học sinh</p>
+          </>
+        )}
 
         {checking ? (
           <p className="text-sm text-gray-400 py-6">Đang kiểm tra phiên đăng nhập…</p>
