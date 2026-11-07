@@ -1,3 +1,4 @@
+import { abandonLeftFreeSubmissions } from '@/lib/abandonLeft';
 import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/mongodb';
@@ -47,11 +48,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     await connectToDatabase();
 
+    // Dọn các lượt thi thử/ôn luyện CỦA CHÍNH TÀI KHOẢN NÀY đã rời app quá 4 phút
+    // (mở nhiều đề rồi bỏ) — rẻ vì lọc theo studentAccountId (có index).
+    await abandonLeftFreeSubmissions({ studentAccountId }).catch(() => 0);
+
     const exam: any = await Exam.findById(examId).lean();
-    if (!exam || !exam.is_published || !exam.openForStudents) {
+    if (!exam || !exam.is_published || !exam.openForMockExam) {
       // 404 (không phải 403) — cùng nguyên tắc "không tiết lộ sự tồn tại
       // của đề chưa được phép" đã dùng ở các route kho đề chung Giai đoạn 3.
-      return NextResponse.json({ error: 'Không tìm thấy đề thi này trong khu Ôn luyện.' }, { status: 404 });
+      return NextResponse.json({ error: 'Không tìm thấy đề thi này trong khu Thi thử.' }, { status: 404 });
     }
 
     const account: any = await StudentAccountModel.findById(studentAccountId).select('name').lean();

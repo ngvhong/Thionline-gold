@@ -42,6 +42,8 @@ export type ExamAccessSettings = {
   showSolution?: ShowSolutionMode;
   solutionOpenAt?: string | Date | null; // dùng khi showSolution = 'custom_time'
   maxAttempts?: number; // 0/undefined = không giới hạn
+  // Cách tính điểm khi làm nhiều lần: 'highest' (mặc định) | 'latest' — xem scoreMode.ts
+  scoreMode?: 'highest' | 'latest';
   // Giờ mở/đóng đề MẶC ĐỊNH áp dụng cho mọi lớp (cấu hình ở tab "Cài đặt"
   // của đề) — 1 lớp cụ thể có thể ghi đè riêng qua ExamAssignment.settings.
   openAt?: string | Date | null;

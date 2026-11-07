@@ -139,7 +139,7 @@ export default function SolutionView({
                 </div>
                 <div className="space-y-2">
                   {(q.options || []).map((opt: any, oi: number) => {
-                    const isPicked = picked === opt._origIdx;
+                    const isPicked = picked !== undefined && picked !== null && picked === (opt._origIdx ?? oi);
                     let cls = 'border-gray-200';
                     if (opt.isCorrect) cls = 'border-green-400 bg-green-50';
                     else if (isPicked) cls = 'border-red-400 bg-red-50';
@@ -202,8 +202,8 @@ export default function SolutionView({
                 </div>
                 <div className="space-y-2">
                   {(q.options || []).map((opt: any, oi: number) => {
-                    const chosen = picks[opt._origIdx];
-                    const wrongPick = chosen !== undefined && chosen !== opt.isCorrect;
+                    const chosen = picks[opt._origIdx ?? oi];
+                    const wrongPick = chosen !== undefined && chosen !== null && chosen !== opt.isCorrect;
                     return (
                       <div
                         key={oi}
@@ -231,7 +231,7 @@ export default function SolutionView({
                             rộng) giữ nguyên layout hàng ngang như cũ. */}
                         <span className="text-xs font-semibold shrink-0 max-[900px]:block max-[900px]:w-full max-[900px]:text-right max-[900px]:pt-1.5 max-[900px]:mt-0.5 max-[900px]:border-t max-[900px]:border-black/10 max-[900px]:font-mono max-[900px]:tracking-wide">
                           Đáp án: {opt.isCorrect ? 'Đúng' : 'Sai'}
-                          {chosen !== undefined && (
+                          {chosen !== undefined && chosen !== null && (
                             <span className="text-gray-400 ml-1">(em chọn: {chosen ? 'Đúng' : 'Sai'})</span>
                           )}
                         </span>

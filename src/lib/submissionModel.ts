@@ -84,6 +84,9 @@ const SubmissionSchema = new mongoose.Schema({
   // với phan_4_TuLuan tại thời điểm chấm) — dùng để quyết định có cộng
   // essayScores vào tổng điểm hiển thị/xuất Excel hay chưa.
   essayGraded: { type: Boolean, default: false },
+  // Nhận xét chữ của GV cho từng câu Phần IV: { [questionId]: string } — học
+  // sinh xem lại cùng điểm và ảnh đã chấm.
+  essayComments: { type: Object, required: false },
 
   // XÁC NHẬN: GV được phép cho học sinh làm lại lần 2, 3... khi có sự cố
   // (mất mạng, nộp nhầm...). Vì vậy KHÔNG còn ràng buộc 1 học sinh - 1 đề =
@@ -107,6 +110,10 @@ const SubmissionSchema = new mongoose.Schema({
   // học sinh quá giờ làm bài mà không nộp (xem lib/expireOverdueSubmissions.ts).
   // Bài tự chốt có 0 điểm, answers rỗng. false/thiếu = học sinh tự nộp thật.
   autoSubmitted: { type: Boolean, default: false },
+  // THÊM MỚI (6-11): lúc học sinh RỜI tab/app khi đang thi (ghi 1 lần khi ẩn tab,
+  // KHÔNG phải heartbeat). Xoá đi khi em quay lại. Quá LEFT_ABANDON_MS mà chưa
+  // quay lại -> lượt Thi thử/Ôn luyện bị ngắt (xem lib/abandonLeft.ts).
+  leftAt: { type: Date, required: false },
 });
 
 // Không đặt unique nữa (vì cho phép nhiều lần làm), nhưng vẫn cần index để

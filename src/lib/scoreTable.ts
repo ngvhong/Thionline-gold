@@ -3,6 +3,9 @@ import { StudentModel } from './studentModel';
 import { SubmissionModel } from './submissionModel';
 import { Exam } from './examModel';
 import { expireOverdueSubmissions } from './expireOverdueSubmissions';
+import { ExamAssignmentModel } from './examAssignmentModel';
+import { resolveEffectiveSettings } from './examAccessRules';
+import { pickRepresentativeAttempt, resolveScoreMode, type ScoreMode } from './scoreMode';
 import { computePartScores, computeEssayMax, DEFAULT_SCORING, type PartScores } from './grading';
 
 // THÊM MỚI (mục 4): gom dữ liệu bảng điểm kiểu Azota — 1 lớp có thể được
@@ -57,7 +60,7 @@ export type ScoreTableData = {
   // THÊM MỚI: cách tính điểm ĐÃ DÙNG để tạo bảng này — ghi lại vào file xuất
   // (xem scoreExport.ts) để GV mở lại file cũ vẫn biết đây là bảng tính theo
   // kiểu nào, không cần nhớ lúc bấm tải đã chọn gì.
-  scoreMode: ScoreMode;
+  scoreMode: ScoreExportMode;
 };
 
 // THÊM MỚI (SỬA LỖI TỐC ĐỘ): trước đây menu "Chọn đề muốn xuất" gọi thẳng
@@ -88,52 +91,21 @@ export async function listAssignedExamOptions(classId: string): Promise<ScoreTab
     .sort((a, b) => a.title.localeCompare(b.title, 'vi'));
 }
 
-// THÊM MỚI: cách chọn "điểm chính thức" khi 1 học sinh làm 1 đề NHIỀU lần
-// (GV cho làm lại) —
-//   'latest'  (mặc định, hành vi cũ) : lấy đúng lần làm MỚI NHẤT, dù điểm
-//             cao hay thấp hơn các lần trước.
-//   'highest' : trong các lần ĐÃ NỘP, lấy lần điểm CAO NHẤT (so theo
-//             scorePoints, hoặc score nếu đề chưa có scorePoints). Nếu học
-//             sinh CHƯA nộp lần nào (mọi attempt còn "chưa thi"/"đang thi")
-//             thì vẫn lấy lần mới nhất để hiện đúng trạng thái hiện tại
-//             (không có gì để so "cao nhất" khi chưa có điểm nào).
-export type ScoreMode = 'latest' | 'highest';
-
-// Chọn 1 attempt đại diện cho mỗi cặp (studentId, examId) từ TOÀN BỘ các lần
-// làm, theo đúng `mode`. Tách riêng khỏi buildScoreTable() để dễ test/đọc.
-function pickRepresentativeAttempt(attempts: any[], mode: ScoreMode): any {
-  if (mode === 'latest') {
-    return attempts.reduce((best, cur) => (cur.attemptNumber > best.attemptNumber ? cur : best));
-  }
-  // mode === 'highest'
-  const submitted = attempts.filter((a) => a.status === 'đã nộp');
-  if (submitted.length === 0) {
-    // Chưa có lần nào nộp — không có điểm để so sánh, trả về lần mới nhất
-    // (đang "chưa thi"/"đang thi") để bảng vẫn hiện đúng trạng thái thật.
-    return attempts.reduce((best, cur) => (cur.attemptNumber > best.attemptNumber ? cur : best));
-  }
-  return submitted.reduce((best, cur) => {
-    const bestPoints = typeof best.scorePoints === 'number' ? best.scorePoints : (best.score ?? -Infinity);
-    const curPoints = typeof cur.scorePoints === 'number' ? cur.scorePoints : (cur.score ?? -Infinity);
-    if (curPoints > bestPoints) return cur;
-    // Bằng điểm nhau -> ưu tiên lần MỚI NHẤT (nhất quán, dễ đoán hơn là giữ
-    // nguyên lần cũ tình cờ đến trước trong mảng).
-    if (curPoints === bestPoints && cur.attemptNumber > best.attemptNumber) return cur;
-    return best;
-  }, submitted[0]);
-}
+// Cách chọn "điểm chính thức" khi làm nhiều lần: xem lib/scoreMode.ts.
+// 'auto' = theo cài đặt Cách tính điểm CỦA TỪNG ĐỀ (Exam.settings.scoreMode).
+export type ScoreExportMode = ScoreMode | 'auto';
 
 // examIdsFilter: nếu truyền vào (không rỗng) thì CHỈ lấy các đề đó (GV chọn
 // lọc bớt ở giao diện) — mặc định (undefined/rỗng) lấy TẤT CẢ đề đã từng
 // giao cho lớp này, đúng yêu cầu "vì có nhiều đề".
-// scoreMode: xem ScoreMode ở trên — mặc định 'latest' (hành vi cũ, không đổi
-// với GV chưa từng chọn gì).
+// scoreMode: 'auto' (mặc định) = theo cài đặt từng đề; 'highest'/'latest' = ép
+// 1 kiểu cho cả bảng.
 export async function buildScoreTable(
   classId: string,
   className: string,
   schoolYear: string,
   examIdsFilter?: string[],
-  scoreMode: ScoreMode = 'latest'
+  scoreMode: ScoreExportMode = 'auto'
 ): Promise<ScoreTableData> {
   const students = await StudentModel.find({ classId }).sort({ name: 1 }).lean();
   const studentIds = students.map((s: any) => s._id);
@@ -166,9 +138,25 @@ export async function buildScoreTable(
     arr.push(s);
     byPair.set(key, arr);
   });
-  const representativeSubmissions = Array.from(byPair.values()).map((attempts) =>
-    pickRepresentativeAttempt(attempts, scoreMode)
-  );
+  // 'auto': mỗi đề theo cài đặt riêng của nó -> cần settings các đề liên quan.
+  // Có tính cài đặt RIÊNG của lớp này (ExamAssignment.settings) nếu GV đã chỉnh.
+  const modeByExam = new Map<string, ScoreMode>();
+  if (scoreMode === 'auto') {
+    const ids = Array.from(new Set(allSubmissions.map((s: any) => String(s.examId))));
+    const [settingsRows, assignRows] = await Promise.all([
+      Exam.find({ _id: { $in: ids } }, { settings: 1 }).lean(),
+      ExamAssignmentModel.find({ classId, examId: { $in: ids } }).lean(),
+    ]);
+    const assignByExam = new Map(assignRows.map((a: any) => [String(a.examId), a]));
+    settingsRows.forEach((e: any) =>
+      modeByExam.set(String(e._id), resolveScoreMode(resolveEffectiveSettings(e.settings, assignByExam.get(String(e._id)) as any)))
+    );
+  }
+  const representativeSubmissions = Array.from(byPair.values()).map((attempts) => {
+    const mode: ScoreMode =
+      scoreMode === 'auto' ? modeByExam.get(String(attempts[0].examId)) || 'highest' : scoreMode;
+    return pickRepresentativeAttempt(attempts, mode);
+  });
 
   const examIdSet = new Set<string>(representativeSubmissions.map((s: any) => String(s.examId)));
   const examIds = Array.from(examIdSet);

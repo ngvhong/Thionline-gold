@@ -2,6 +2,7 @@
 
 import { AppLogoIcon, APP_NAME } from '@/components/AppBranding';
 import { setPortalChoice, type PortalChoiceValue } from '@/lib/portalChoice';
+import GuideVideoButton from '@/components/GuideVideoButton';
 
 
 // SỬA (khiếu nại: "xoá icon emoji, thay bằng icon svg nét mảnh cho đồng bộ"):
@@ -50,7 +51,10 @@ export default function PortalChoice({
           <AppLogoIcon className="w-10 h-10 shrink-0" />
           {APP_NAME}
         </p>
-        <p className="text-sm text-gray-400 text-center mb-6">Bạn là ai?</p>
+        <p className="text-sm text-gray-400 text-center mb-3">Bạn là ai?</p>
+        <div className="flex justify-center mb-5">
+          <GuideVideoButton role="both" />
+        </div>
 
         <div className="space-y-3">
           <button

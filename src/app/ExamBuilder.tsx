@@ -16,6 +16,8 @@ import { scrollFadeX } from '@/lib/scrollFade';
 // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): popup "Chia sẻ vào
 // kho chung", xem chi tiết trong component.
 import ShareToLibraryModal from '@/components/ShareToLibraryModal';
+import ExamStatsModal from '@/components/ExamStatsModal';
+import { DEFAULT_EXAM_DURATION_MINUTES, DEFAULT_EXAM_MAX_ATTEMPTS, LEGACY_EXAM_DURATION_MINUTES, LEGACY_EXAM_MAX_ATTEMPTS } from '@/lib/examDefaults';
 
 // Icon nét vẽ đơn giản (kiểu outline, 1 màu, kế thừa currentColor) — dùng
 // thay cho emoji ở Bảng Điều Khiển Phòng Thi để đồng bộ hình thức, tránh mỗi
@@ -170,6 +172,15 @@ const TIKZ_ENDPOINTS = [
 // do điểm dựng hình ẩn) vẫn nằm ở tikzCrop.ts (server, lúc lưu đề) +
 // getBBox() phía trình duyệt (lúc xem) như đã thống nhất — 2 việc độc
 // lập, không thay thế nhau.
+// THÊM MỚI: hỗ trợ hình dùng tikz-3dplot (\\tdplotsetmaincoords, style
+// tdplot_main_coords — hay gặp ở hình cầu/mặt cắt 3D). Máy chủ biên dịch
+// có thể CHƯA cài gói này (đã thử: thiếu gói -> "Undefined control sequence
+// \\tdplotsetmaincoords"), nên: (1) nạp gói nếu có (\\IfFileExists, không
+// làm hỏng hình khác khi thiếu), (2) \\providecommand định nghĩa sẵn bản
+// thay thế của \\tdplotsetmaincoords — CHỈ có tác dụng khi gói chưa nạp được
+// (providecommand không ghi đè lệnh đã có). Công thức lấy đúng từ
+// tikz-3dplot.sty (x,y,z -> toạ độ màn hình theo θ, φ); đã so sánh điểm ảnh
+// với gói thật cho kết quả giống hệt.
 function buildTikzTemplate(tikzCode: string) {
   return `\\documentclass[tikz, border=1pt]{standalone}
 \\usepackage[utf8]{vietnam}
@@ -180,6 +191,8 @@ function buildTikzTemplate(tikzCode: string) {
 \\usepackage[version=4]{mhchem}
 \\usepackage{tkz-euclide}
 \\usepackage{pgfplots, tkz-tab, pgf-pie}
+\\IfFileExists{tikz-3dplot.sty}{\\usepackage{tikz-3dplot}}{}
+\\providecommand{\\tdplotsetmaincoords}[2]{\\tikzset{tdplot_main_coords/.style={x={({cos(#2)*1cm},{-sin(#2)*cos(#1)*1cm})},y={({sin(#2)*1cm},{cos(#2)*cos(#1)*1cm})},z={(0cm,{sin(#1)*1cm})}}}}
 \\pgfplotsset{compat=1.18}
 \\usepgfplotslibrary{fillbetween, colormaps}
 \\usetikzlibrary{calc, angles, quotes, intersections, patterns, patterns.meta, shadings, arrows.meta, 3d, perspective, decorations.markings, decorations.pathreplacing, decorations.pathmorphing, positioning, shapes.geometric, trees, mindmap, matrix}
@@ -346,6 +359,18 @@ function localToRootBBox(
   let ctm: DOMMatrix | null = null;
   try {
     ctm = (el as unknown as SVGGraphicsElement).getCTM();
+    // SỬA LỖI GỐC (4-11, "mất khúc trên hình cột cờ + MỌI bảng biến thiên lớp 12
+    // bị lẹm đầu hình"): getCTM() của phần tử là ma trận phần tử -> VIEWPORT,
+    // đã CỘNG SẴN phép tịnh tiến của viewBox. SVG do dvisvgm xuất thường có
+    // viewBox bắt đầu ở số ÂM (vd "-72 -72 W H"), nên bbox "nhìn thấy" bị lệch
+    // đúng 72 đơn vị so với `bbox` của getBBox() trên <svg> (vốn ở toạ độ
+    // viewBox) -> extraTop thành ~72 (> ngưỡng 30) -> cắt oan ~56 đơn vị phía
+    // trên. SỬA: nhân thêm nghịch đảo CTM của <svg> gốc để đưa về ĐÚNG hệ toạ
+    // độ viewBox (cả tịnh tiến lẫn tỉ lệ), thay vì chỉ chia rootScale.
+    const rootEl = (el as unknown as SVGGraphicsElement).ownerSVGElement;
+    const rootCtm = rootEl ? (rootEl as unknown as SVGGraphicsElement).getCTM() : null;
+    if (ctm && rootCtm) ctm = rootCtm.inverse().multiply(ctm);
+    else ctm = null;
   } catch {
     ctm = null;
   }
@@ -356,8 +381,8 @@ function localToRootBBox(
     { x: bb.x, y: bb.y + bb.height },
     { x: bb.x + bb.width, y: bb.y + bb.height },
   ].map((p) => ({
-    x: (ctm!.a * p.x + ctm!.c * p.y + ctm!.e) / rootScale,
-    y: (ctm!.b * p.x + ctm!.d * p.y + ctm!.f) / rootScale,
+    x: ctm!.a * p.x + ctm!.c * p.y + ctm!.e,
+    y: ctm!.b * p.x + ctm!.d * p.y + ctm!.f,
   }));
   const xs = corners.map((c) => c.x);
   const ys = corners.map((c) => c.y);
@@ -496,7 +521,7 @@ function TikzImage({
         // nên dù margin ngoài giảm về 0, hình TikZ ở màn soạn đề vẫn còn
         // khoảng trắng quanh nét vẽ do dòng này gây ra. Muốn giảm phải sửa
         // số 4 ở đây, không phải my-1.
-        const BASE_PADDING = 0.5; // GIẢM TIẾP (test biên 17-7): 1.6 -> 0.5, đồng bộ với examRender.tsx & margin ngoài đã về 0 (my-0)
+        const BASE_PADDING = 2; // 28-7: 0.5 -> 2 (khung bảng biến thiên mất đường kẻ trên/dưới) // GIẢM TIẾP (test biên 17-7): 1.6 -> 0.5, đồng bộ với examRender.tsx & margin ngoài đã về 0 (my-0)
         if (bbox.width > 0 && bbox.height > 0) {
           // MỚI (21-7, sửa lại theo yêu cầu — dùng NGƯỠNG SỐ PX CỤ THỂ thay
           // vì tỉ lệ, xét RIÊNG từng đầu trên/dưới, không cộng gộp — ĐỒNG BỘ
@@ -510,8 +535,8 @@ function TikzImage({
           // giờ đã đo đúng bằng CTM (xem localToRootBBox), khoảng trống thật
           // của ảnh bình thường chỉ còn ~2-6px -> hạ ngưỡng/đệm tương ứng
           // (trước là 35/15, để lớn vì lúc đó phép đo còn lệch hệ tọa độ).
-          const LARGE_GAP_THRESHOLD_PX = 10;
-          const SAFE_MARGIN_PX = 5;
+          const LARGE_GAP_THRESHOLD_PX = 30;
+          const SAFE_MARGIN_PX = 14; // hình cao bị khuất đầu/cuối: nới biên an toàn
           let vTop = bbox.y;
           let vBottom = bbox.y + bbox.height;
           const visible = getVisibleContentBBox(svgEl as unknown as SVGSVGElement);
@@ -616,11 +641,14 @@ function TikzImage({
     el.style.marginRight = 'auto';
   }, [scale, base]);
 
+  // 28-7: giữ cùng 1 object cho dangerouslySetInnerHTML (React 19 so theo định danh, object mới mỗi lần render sẽ ghi đè lại SVG gốc, mất viewBox đã cắt).
+  const svgHtmlProp = useMemo(() => ({ __html: namespacedSvg }), [namespacedSvg]);
+
   return (
     <div
       ref={containerRef}
       className="tikz-svg-wrap w-full flex justify-center overflow-x-auto"
-      dangerouslySetInnerHTML={{ __html: namespacedSvg }}
+      dangerouslySetInnerHTML={svgHtmlProp}
     />
   );
 }
@@ -1141,7 +1169,7 @@ function classifyMarkdownQuestionType(body: string): 'multiple_choice' | 'true_f
 function parseMdPartI(body: string, num: string): MdQuestion | null {
   const re = /^([\s\S]*?)\n\s*A\.\s*([\s\S]*?)\n\s*B\.\s*([\s\S]*?)\n\s*C\.\s*([\s\S]*?)\n\s*D\.\s*([\s\S]*?)\n\s*\*\*Lời giải\s*:?\*\*:?\s*([\s\S]*?)\n\s*\*\*Chọn\s*:?\*\*:?\s*([ABCD])/;
   const m = body.match(re);
-  if (!m) return null;
+  if (!m) return parseMdPartILenient(body, num);
   const [, content, a, b, c, d, solution, chosen] = m;
   const letters = ['A', 'B', 'C', 'D'];
   const texts = [a, b, c, d];
@@ -1159,7 +1187,7 @@ function parseMdPartI(body: string, num: string): MdQuestion | null {
 function parseMdPartII(body: string, num: string): MdQuestion | null {
   const re = /^([\s\S]*?)\n\s*a\)\s*([\s\S]*?)\n\s*b\)\s*([\s\S]*?)\n\s*c\)\s*([\s\S]*?)\n\s*d\)\s*([\s\S]*?)\n\s*\*\*Lời giải\s*:?\*\*:?\s*([\s\S]*?)\n\s*\*\*Đáp án\s*:?\*\*:?\s*([\s\S]*)$/;
   const m = body.match(re);
-  if (!m) return null;
+  if (!m) return parseMdPartIILenient(body, num);
   const [, content, a, b, c, d, solution, answerLine] = m;
   const letters = ['a', 'b', 'c', 'd'];
   const texts = [a, b, c, d];
@@ -1235,12 +1263,435 @@ function parseMdGenericFallback(body: string, num: string, marker: 'Câu' | 'Bà
   };
 }
 
+
+// =====================================================================
+// THÊM MỚI (nhập đề cho người KHÔNG BIẾT LaTeX — dùng AI OCR ra file .md
+// kèm thư mục ảnh đã cắt/vẽ):
+//  - extractImagesMarkdown: đổi ảnh trong markdown (![](images/h1.png),
+//    <img src="...">) và cả \includegraphics thành mốc [[HÌNH_FILE_n]] +
+//    image_list {id, path} — CÙNG cấu trúc parser.ts sinh ra cho .tex, nên
+//    phần hiển thị/khớp ảnh theo tên file/Lưu/Xuất bản dùng lại 100%.
+//  - normalizeMarkdownExamText: AI OCR thường ra "Câu 1." / "Lời giải:" không
+//    in đậm -> đưa về đúng mẫu "**Câu 1:**", "**Lời giải:**"... (chỉ khi file
+//    CHƯA đúng mẫu và không phải .tex).
+// =====================================================================
+function extractImagesMarkdown(text: string, imageList: { id: string; path: string }[]): string {
+  const isRemote = (p: string) => /^(?:https?:)?\/\/|^data:/i.test(p.trim());
+  const add = (rawPath: string) => {
+    let path = rawPath.trim().replace(/^<|>$/g, '');
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      /* giữ nguyên nếu không giải mã được */
+    }
+    const id = `[[HÌNH_FILE_${imageList.length + 1}]]`;
+    imageList.push({ id, path });
+    return id;
+  };
+  let out = text.replace(
+    /!\[[^\]]*\]\(\s*(<[^>]*>|[^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g,
+    (m, p: string) => (isRemote(p) ? m : add(p))
+  );
+  out = out.replace(/<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi, (m, p: string) => (isRemote(p) ? m : add(p)));
+  out = out.replace(/\\includegraphics(?:\[[^\]]*\])?\{([^}]*)\}/g, (_m, p: string) => add(p));
+  return out;
+}
+
+function normalizeMarkdownExamText(raw: string): string {
+  let t = raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  if (/\\begin\{ex\}/.test(t) || isMarkdownExamFormat(t)) return /\\begin\{ex\}/.test(t) ? raw : t;
+  // "Câu 1." / "## Câu 1:" / "Bài 2)" ở đầu dòng -> "**Câu 1:** "
+  t = t.replace(/^[ \t]*(?:#{1,6}[ \t]*)?(câu|bài)[ \t]*(\d+)[ \t]*[:.)][ \t]*/gim, (_m, w: string, n: string) => `**${/^b/i.test(w) ? 'Bài' : 'Câu'} ${n}:** `);
+  // Nhãn không in đậm -> in đậm
+  t = t.replace(/^[ \t]*(?:lời giải|hướng dẫn giải|giải)[ \t]*:[ \t]*/gim, '**Lời giải:** ');
+  t = t.replace(/^[ \t]*đáp án[ \t]*:[ \t]*/gim, '**Đáp án:** ');
+  t = t.replace(/^[ \t]*đáp số[ \t]*:[ \t]*/gim, '**Đáp số:** ');
+  t = t.replace(/^[ \t]*chọn[ \t]*:?[ \t]*([ABCD])[ \t]*\.?[ \t]*$/gim, '**Chọn** $1');
+  // "A)" -> "A."
+  t = t.replace(/^[ \t]*([ABCD])\)[ \t]+/gm, '$1. ');
+  return t;
+}
+
+// Bản "dễ tính" cho Phần I/II: không bắt buộc có Lời giải / Chọn / Đáp án
+// (đề chỉ OCR từ giấy, chưa có đáp án). Thiếu đáp án thì chưa câu nào đúng —
+// giáo viên đặt đáp án đúng sau trong màn Xem đề.
+function splitMdTail(allText: string): { head: string; solution: string; answerLine: string } {
+  const sol = allText.match(/\*\*Lời giải\s*:?\*\*:?/);
+  const ans = allText.match(/\*\*(?:Chọn|Đáp án)\s*:?\*\*:?/);
+  let head = allText;
+  let solution = '';
+  let answerLine = '';
+  const solIdx = sol && sol.index !== undefined ? sol.index : -1;
+  const ansIdx = ans && ans.index !== undefined ? ans.index : -1;
+  const firstIdx = [solIdx, ansIdx].filter((i) => i >= 0).sort((a, b) => a - b)[0];
+  if (firstIdx !== undefined) head = allText.slice(0, firstIdx);
+  if (ansIdx >= 0) {
+    answerLine = allText.slice(ansIdx + (ans ? ans[0].length : 0));
+    if (solIdx >= 0 && solIdx < ansIdx) solution = allText.slice(solIdx + (sol ? sol[0].length : 0), ansIdx).trim();
+  } else if (solIdx >= 0) {
+    solution = allText.slice(solIdx + (sol ? sol[0].length : 0)).trim();
+  }
+  return { head, solution, answerLine };
+}
+
+function parseMdPartILenient(body: string, num: string): MdQuestion | null {
+  const m = body.match(/^([\s\S]*?)\n\s*A\.\s*([\s\S]*?)\n\s*B\.\s*([\s\S]*?)\n\s*C\.\s*([\s\S]*?)\n\s*D\.\s*([\s\S]*)$/);
+  if (!m) return null;
+  const [, content, a, b, c, dAll] = m;
+  const { head: d, solution, answerLine } = splitMdTail(dAll);
+  const cm = answerLine.match(/^\s*([ABCD])\b/);
+  const chosen = cm ? cm[1] : '';
+  const letters = ['A', 'B', 'C', 'D'];
+  return {
+    id: `md-p1-c${num}`,
+    label: 'Câu',
+    code: `P1.${num}`,
+    content: content.trim(),
+    options: [a, b, c, d].map((tx, i) => ({ text: tx.trim(), isCorrect: letters[i] === chosen })),
+    solution,
+  };
+}
+
+function parseMdPartIILenient(body: string, num: string): MdQuestion | null {
+  const m = body.match(/^([\s\S]*?)\n\s*a\)\s*([\s\S]*?)\n\s*b\)\s*([\s\S]*?)\n\s*c\)\s*([\s\S]*?)\n\s*d\)\s*([\s\S]*)$/);
+  if (!m) return null;
+  const [, content, a, b, c, dAll] = m;
+  const { head: d, solution, answerLine } = splitMdTail(dAll);
+  const letters = ['a', 'b', 'c', 'd'];
+  return {
+    id: `md-p2-c${num}`,
+    label: 'Câu',
+    code: `P2.${num}`,
+    content: content.trim(),
+    options: [a, b, c, d].map((tx, i) => {
+      const am = answerLine.match(new RegExp(`${letters[i]}\\)\\s*(Đúng|Sai)`, 'i'));
+      return { text: tx.trim(), isCorrect: !!am && /đúng/i.test(am[1]) };
+    }),
+    solution,
+  };
+}
+
+
+// =====================================================================
+// THÊM MỚI: ĐỀ MẪU để người dùng lần đầu (nhất là GV không biết LaTeX) thử
+// nhanh ứng dụng không cần chuẩn bị file. Ảnh được VẼ NGAY TRONG TRÌNH DUYỆT
+// (canvas) nên không cần tệp ảnh đi kèm. Đề mẫu viết theo ĐÚNG cấu trúc tệp .tex
+// thật (begin{ex}, choice, choiceTF + itemchoice, shortans, begin{bt}, xuống
+// dòng bằng hai dấu gạch chéo ngược) để GV thấy mẫu và soạn đề theo.
+// =====================================================================
+const SAMPLE_EXAM_TEX = String.raw`\caulc
+\begin{ex}%[2D1N2-1]
+	Cho hàm số $y = f(x)$ có bảng biến thiên như sau
+	\begin{center}
+		\begin{tikzpicture}[scale=1, font=\footnotesize, line join=round, line cap=round, >=stealth]
+			\tkzTabInit[nocadre=false, lgt=1.5, espcl=3]
+				{$x$ /1, $y'$ /0.7, $y$ /2.5}
+				{$-\infty$, $-1$, $3$, $+\infty$}
+			\tkzTabLine{, +, 0, -, 0, +, }
+			\tkzTabVar{-/ $-\infty$, +/ $6$, -/ $-26$, +/ $+\infty$}
+		\end{tikzpicture}
+	\end{center}
+	Hàm số đã cho nghịch biến trên khoảng nào sau đây?
+	\choice
+		{$(-26;6)$}
+		{\True $(-1;2)$}
+		{$(3;+\infty)$}
+		{$(-\infty;-1)$}
+	\loigiai{
+		Dựa vào bảng biến thiên, ta thấy $y'<0$ trên khoảng $(-1;3)$.\\
+		Do đó hàm số nghịch biến trên khoảng $(-1;3)$, suy ra hàm số nghịch biến trên $(-1;2)$ vì $(-1;2)\subset(-1;3)$.
+	}
+\end{ex}
+
+\begin{ex}%[2D1N1-2]
+	\immini[thm]{Cho hàm số bậc ba $y=f(x)$ có đồ thị như hình vẽ. Hàm số đã cho đồng biến trên khoảng nào dưới đây?
+		\choice[2]
+			{$(1;+\infty)$}
+			{$(-1;2)$}
+			{$(-\infty;-1)$}
+			{\True $(-1;1)$}}
+		{\includegraphics[width=5cm]{images/do-thi-bac-ba-1.png}}
+	\loigiai{
+		Dựa vào đồ thị, hàm số đi lên từ trái sang phải trên khoảng $(-1;1)$.\\
+		Vậy hàm số đồng biến trên khoảng $(-1;1)$.
+	}
+\end{ex}
+
+\begin{ex}%[2D1N2-2]
+	Cho hàm số $y=f(x)$ có đạo hàm $f'(x)=(x-1)(x-2)^2(x-3)^3$. Số điểm cực trị của hàm số $y=f(x)$ là
+	\choice
+		{$1$}
+		{\True $2$}
+		{$3$}
+		{$0$}
+	\loigiai{
+		Ta có $f'(x)=0\Leftrightarrow x=1$ hoặc $x=2$ hoặc $x=3$.\\
+		Trong đó $x=1$ và $x=3$ là nghiệm bội lẻ, $x=2$ là nghiệm bội chẵn.\\
+		Vì $f'(x)$ chỉ đổi dấu khi đi qua nghiệm bội lẻ nên hàm số có $2$ điểm cực trị.
+	}
+\end{ex}
+
+\begin{ex}%[2D1N2-3]
+	Cho hàm số $f(x)$ có bảng biến thiên như sau
+	\begin{center}
+		\begin{tikzpicture}[scale=1, font=\footnotesize, line join=round, line cap=round, >=stealth]
+			\tkzTabInit[nocadre=false, lgt=1.2, espcl=2.5]
+				{$x$ /1, $f'(x)$ /1, $f(x)$ /2}
+				{$-\infty$, $-2$, $3$, $+\infty$}
+			\tkzTabLine{ , -, 0, +, 0, -, }
+			\tkzTabVar{+ / $+\infty$, - / $-3$, + / $2$, - / $-\infty$}
+		\end{tikzpicture}
+	\end{center}
+	Giá trị cực đại của hàm số đã cho bằng
+	\choice
+		{\True $2$}
+		{$-2$}
+		{$-3$}
+		{$3$}
+	\loigiai{
+		Dựa vào bảng biến thiên, hàm số đạt cực tiểu tại $x=-2$ với giá trị cực tiểu $y_{\text{CT}}=-3$.\\
+		Hàm số đạt cực đại tại $x=3$ với giá trị cực đại $y_{\text{CĐ}}=2$.\\
+		Vậy giá trị cực đại của hàm số bằng $2$.
+	}
+\end{ex}
+
+\begin{ex}%[2D1N2-4]
+	\immini[thm]{Cho hàm số $y=f(x)$ có đồ thị như hình vẽ. Điểm cực tiểu của hàm số đó là
+		\choice[2]
+			{$x=-2$}
+			{\True $x=2$}
+			{$x=0$}
+			{$y=-2$}}
+		{\includegraphics[width=5cm]{images/do-thi-bac-ba-2.png}}
+	\loigiai{
+		Từ đồ thị hàm số đã cho, ta có điểm cực tiểu của hàm số là $x=2$.
+	}
+\end{ex}
+
+\begin{ex}%[2D1N3-1]
+	Cho hàm số $y=x^3-12x+6$. Giá trị lớn nhất của hàm số trên đoạn $[-3;3]$ là
+	\choice[2]
+		{$17$}
+		{$6$}
+		{$15$}
+		{\True $22$}
+	\loigiai{
+		Ta có $y'=3x^2-12$, $y'=0\Leftrightarrow x=\pm 2$ (thuộc đoạn $[-3;3]$).\\
+		Tính $y(-3)=15$, $y(3)=-3$, $y(2)=-10$, $y(-2)=22$.\\
+		Vậy $\max\limits_{[-3;3]}y=22$.
+	}
+\end{ex}
+
+\Closesolutionfile{ans}
+\cauds
+\begin{ex}%[2D1H5-1]
+	\immini[thm]{Cho hàm số $y=\dfrac{ax^2+2x-2}{x+b}$ có đồ thị như hình vẽ. Khi đó
+		\choiceTF
+			{\True Đồ thị hàm số nhận đường thẳng $x=1$ làm tiệm cận đứng}
+			{Đồ thị hàm số nhận đường thẳng $y=x+1$ làm tiệm cận xiên}
+			{Tọa độ các điểm cực đại và cực tiểu của đồ thị hàm số lần lượt là $(0;2)$ và $(2;-2)$}
+			{\True Đồ thị hàm số nhận điểm $(1;0)$ làm tâm đối xứng}}
+		{\includegraphics[width=5cm]{images/do-thi-phan-thuc.png}}
+	\loigiai{
+		\begin{itemchoice}
+			\itemch Quan sát đồ thị ta thấy đường thẳng $x=1$ là tiệm cận đứng của đồ thị hàm số.
+			\itemch Tiệm cận xiên đi qua hai điểm $(0;1)$ và $(1;0)$ nên có phương trình là $y=-x+1$.
+			\itemch Dựa vào đồ thị, $(0;2)$ là điểm cực tiểu và $(2;-2)$ là điểm cực đại của đồ thị hàm số.
+			\itemch Giao điểm của hai đường tiệm cận là $I(1;0)$ và là tâm đối xứng của đồ thị hàm số.
+		\end{itemchoice}
+	}
+\end{ex}
+
+\begin{ex}%[2D1V3-2]
+	Một hộ làm nghề dệt vải lụa tơ tằm sản xuất mỗi ngày được $x$ mét vải lụa ($1\le x\le 18$). Tổng chi phí sản xuất $x$ mét vải lụa, tính bằng nghìn đồng, cho bởi hàm chi phí $C(x)=x^3-3x^2-20x+500$. Giả sử hộ này bán hết sản phẩm mỗi ngày với giá $220$ nghìn đồng/mét. Gọi $B(x)$ là số tiền bán được và $L(x)$ là lợi nhuận thu được khi bán $x$ mét vải lụa.
+	\choiceTF
+		{\True Biểu thức tính $B(x)$ theo $x$ là $B(x)=220x$ (nghìn đồng)}
+		{Biểu thức tính $L(x)$ theo $x$ là $L(x)=-x^3+3x^2+220x-500$ (nghìn đồng)}
+		{\True Hộ này cần sản xuất và bán ra mỗi ngày $10$ mét vải lụa để thu được lợi nhuận tối đa}
+		{Lợi nhuận tối đa mỗi ngày là $1\,000$ nghìn đồng}
+	\loigiai{
+		\begin{itemchoice}
+			\itemch Số tiền bán được là $B(x)=220x$ (nghìn đồng).
+			\itemch Lợi nhuận thu được là\\
+			$L(x)=B(x)-C(x)=220x-\left(x^3-3x^2-20x+500\right)=-x^3+3x^2+240x-500$ (nghìn đồng).
+			\itemch Ta có $L'(x)=-3x^2+6x+240$, $L'(x)=0\Leftrightarrow x=10$ (nhận) hoặc $x=-8$ (loại).\\
+			Hàm số $L(x)$ có $L'(x)$ đổi dấu từ dương sang âm khi qua $x=10$ nên $L(x)$ lớn nhất tại $x=10$.\\
+			Vậy mỗi ngày hộ này cần sản xuất và bán ra $10$ mét vải lụa để thu được lợi nhuận tối đa.
+			\itemch Lợi nhuận tối đa mỗi ngày là\\
+			$L(10)=-1\,000+300+2\,400-500=1\,200$ (nghìn đồng).
+		\end{itemchoice}
+	}
+\end{ex}
+
+\Closesolutionfile{ans}
+\caukq
+\begin{ex}%[2D1V2-3]
+	Cho hàm số $y=x^3-3x+2$ có giá trị cực đại $y_1$ và giá trị cực tiểu $y_2$. Tính $S=y_2-2y_1$.
+	\par
+	\shortans{$-8$}
+	\loigiai{
+		Ta có $y'=3x^2-3$, $y'=0\Leftrightarrow x=\pm 1$.\\
+		Hàm số đạt cực đại tại $x=-1$ với $y_1=4$ và đạt cực tiểu tại $x=1$ với $y_2=0$.\\
+		Khi đó $S=y_2-2y_1=0-2\cdot 4=-8$.
+	}
+\end{ex}
+
+\begin{ex}%[2D1V4-2]
+	Cho hàm số $y=\dfrac{x^2+6x+15}{x}$. Đường tiệm cận xiên của đồ thị hàm số tạo với hai trục tọa độ một tam giác có diện tích bằng bao nhiêu?
+	\par
+	\shortans{$18$}
+	\loigiai{
+		Ta có $y=x+6+\dfrac{15}{x}$ nên tiệm cận xiên của đồ thị là $(d)\colon y=x+6$.\\
+		Đường thẳng $(d)$ cắt trục tung tại $A(0;6)$ và cắt trục hoành tại $B(-6;0)$.\\
+		Tam giác $OAB$ vuông tại $O$ có diện tích là
+		\[S=\dfrac{1}{2}\cdot OA\cdot OB=\dfrac{1}{2}\cdot 6\cdot 6=18.\]
+	}
+\end{ex}
+
+% Phần IV. Tự luận
+\begin{bt}%[2D1V3-5]
+	Trong kế hoạch khai thác tuyến ca nô cao tốc phục vụ du lịch sinh thái trên lòng hồ Thủy điện Sơn La (từ bến Mường La đi Quỳnh Nhai) có chiều dài $100$\,km. Ban quản lý cần xác định vận tốc khai thác $v$ (km/h) cho ca nô ($30\le v\le 70$) để đạt lợi nhuận cao nhất. Công suất tiêu thụ điện của động cơ là $P(v)=10v^3$ (W), giá điện là $2\,000$ đồng/kWh. Chi phí vận hành cố định là $2\,500\,000$ đồng cho mỗi giờ ca nô chạy. Số khách mỗi chuyến là $N(v)=\dfrac{v}{5}+20$ (hành khách), giá vé bình quân là $500\,000$ đồng/khách. Hãy xác định vận tốc khai thác $v$ để lợi nhuận ròng của mỗi chuyến là lớn nhất (biết điện lượng tiêu thụ là $A=P(v)t$).
+	\loigiai{
+		Thời gian ca nô chạy một chuyến là $t=\dfrac{100}{v}$ (giờ).\\
+		Điện lượng tiêu thụ là $A=10v^3\cdot\dfrac{100}{v}=1\,000v^2$ (Wh) $=v^2$ (kWh), nên chi phí tiền điện là $2\,000v^2$ (đồng).\\
+		Chi phí vận hành cố định mỗi chuyến là $2\,500\,000\cdot\dfrac{100}{v}=\dfrac{250\,000\,000}{v}$ (đồng).\\
+		Doanh thu bán vé mỗi chuyến là $\left(\dfrac{v}{5}+20\right)\cdot 500\,000=100\,000v+10\,000\,000$ (đồng).\\
+		Hàm lợi nhuận mỗi chuyến là
+		\[f(v)=100\,000v+10\,000\,000-2\,000v^2-\dfrac{250\,000\,000}{v},\quad v\in[30;70].\]
+		Ta có $f'(v)=100\,000-4\,000v+\dfrac{250\,000\,000}{v^2}$ và $f'(v)=0\Leftrightarrow v=50$.\\
+		Xét dấu: $f'(v)>0$ trên khoảng $(30;50)$ và $f'(v)<0$ trên khoảng $(50;70)$ nên $f(v)$ đạt giá trị lớn nhất tại $v=50$.\\
+		Vậy vận tốc khai thác để lợi nhuận cao nhất là $50$\,km/h.
+	}
+\end{bt}
+`;
+
+// Vẽ đồ thị bằng canvas cho đề mẫu (đồ thị gốc là tikz cần server biên dịch,
+// đề mẫu phải chạy được ngay nên vẽ lại bằng canvas).
+type SampleGraphKind = 'bac-ba-1' | 'bac-ba-2' | 'phan-thuc';
+
+function drawSampleImage(kind: SampleGraphKind): Promise<Blob> {
+  const W = 360;
+  const H = 280;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, W, H);
+
+  // cấu hình theo từng đồ thị: gốc O (ox, oy), 1 đơn vị = ux/uy px
+  const cfg = {
+    'bac-ba-1': { ox: 180, oy: 140, ux: 60, uy: 40, f: (x: number) => -x * x * x + 3 * x, x0: -2.05, x1: 2.05 },
+    'bac-ba-2': { ox: 110, oy: 130, ux: 60, uy: 36, f: (x: number) => x * x * x - 3 * x * x + 2, x0: -1.25, x1: 3.25 },
+    'phan-thuc': { ox: 130, oy: 140, ux: 50, uy: 36, f: (x: number) => (-x * x + 2 * x - 2) / (x - 1), x0: -2.4, x1: 4.6 },
+  }[kind];
+  const { ox, oy, ux, uy, f } = cfg;
+  const X = (x: number) => ox + x * ux;
+  const Y = (y: number) => oy - y * uy;
+
+  g.strokeStyle = '#111827';
+  g.fillStyle = '#111827';
+  g.lineWidth = 1.5;
+  g.font = '14px sans-serif';
+  g.beginPath(); g.moveTo(14, oy); g.lineTo(W - 14, oy); g.moveTo(ox, H - 10); g.lineTo(ox, 12); g.stroke();
+  g.fillText('x', W - 22, oy + 16); g.fillText('y', ox + 8, 20); g.fillText('O', ox - 16, oy + 16);
+
+  const dash = (x1: number, y1: number, x2: number, y2: number) => {
+    g.save(); g.setLineDash([5, 4]); g.lineWidth = 1; g.strokeStyle = '#6b7280';
+    g.beginPath(); g.moveTo(X(x1), Y(y1)); g.lineTo(X(x2), Y(y2)); g.stroke(); g.restore();
+  };
+  const dot = (x: number, y: number) => { g.beginPath(); g.arc(X(x), Y(y), 3, 0, Math.PI * 2); g.fill(); };
+
+  if (kind === 'bac-ba-1') {
+    dash(1, 0, 1, 2); dash(1, 2, 0, 2); dash(-1, 0, -1, -2); dash(-1, -2, 0, -2);
+    g.fillText('2', X(0) - 14, Y(2) + 4); g.fillText('−2', X(0) + 6, Y(-2) + 4);
+    g.fillText('1', X(1) - 3, oy + 16); g.fillText('−1', X(-1) - 8, oy - 8);
+  } else if (kind === 'bac-ba-2') {
+    dash(2, 0, 2, -2); dash(2, -2, 0, -2);
+    g.fillText('2', X(0) - 14, Y(2) + 4); g.fillText('2', X(2) - 3, oy - 8); g.fillText('−2', X(0) - 24, Y(-2) + 4);
+    dot(0, 2); dot(2, -2);
+  } else {
+    // tiệm cận đứng x=1 và tiệm cận xiên y=-x+1
+    g.save(); g.lineWidth = 1; g.strokeStyle = '#9ca3af';
+    g.beginPath(); g.moveTo(X(1), 12); g.lineTo(X(1), H - 10); g.moveTo(X(-2.4), Y(3.4)); g.lineTo(X(4.6), Y(-3.6)); g.stroke(); g.restore();
+    dash(2, 0, 2, -2); dash(2, -2, 0, -2);
+    g.fillText('1', X(1) - 12, oy + 16); g.fillText('2', X(2) - 3, oy - 8);
+    g.fillText('2', X(0) - 14, Y(2) + 4); g.fillText('−2', X(0) - 24, Y(-2) + 4);
+    dot(0, 2); dot(2, -2);
+  }
+
+  // vẽ đường cong (ngắt nét khi ra ngoài khung hoặc qua tiệm cận đứng)
+  g.strokeStyle = '#2563eb';
+  g.lineWidth = 2.5;
+  g.beginPath();
+  let started = false;
+  let prevPy = 0;
+  for (let x = cfg.x0; x <= cfg.x1; x += 0.01) {
+    const y = f(x);
+    const px = X(x), py = Y(y);
+    const out = !isFinite(y) || py < 8 || py > H - 6;
+    if (out || (started && Math.abs(py - prevPy) > 60)) { started = false; prevPy = py; continue; }
+    if (!started) { g.moveTo(px, py); started = true; } else g.lineTo(px, py);
+    prevPy = py;
+  }
+  g.stroke();
+
+  return new Promise((resolve, reject) => cv.toBlob((b) => (b ? resolve(b) : reject(new Error('canvas'))), 'image/png'));
+}
+
+async function buildSampleImages(): Promise<{ name: string; blob: Blob }[]> {
+  return [
+    { name: 'do-thi-bac-ba-1.png', blob: await drawSampleImage('bac-ba-1') },
+    { name: 'do-thi-bac-ba-2.png', blob: await drawSampleImage('bac-ba-2') },
+    { name: 'do-thi-phan-thuc.png', blob: await drawSampleImage('phan-thuc') },
+  ];
+}
+
+// Prompt mẫu để người không biết LaTeX dán vào AI (ChatGPT/Gemini/Claude...) cùng ảnh/PDF đề.
+const AI_OCR_PROMPT = `Hãy chuyển đề thi trong ảnh/PDF đính kèm thành MỘT file Markdown theo ĐÚNG mẫu dưới đây.
+
+QUY TẮC:
+- Công thức toán viết bằng LaTeX, đặt trong $...$ (ví dụ $x^2-4x+3$).
+- Mỗi hình vẽ/đồ thị/bảng hình: xuất thành ảnh riêng tên hinh1.png, hinh2.png... (đánh số liên tục) và chèn đúng vị trí bằng ![](images/hinh1.png).
+- Giữ đúng nhãn in đậm **Câu n:**, **Lời giải:**, **Chọn**, **Đáp án**, **Đáp số** như mẫu. Không thêm lời dẫn nào ngoài file.
+- Nếu đề chưa có lời giải/đáp án thì bỏ các dòng đó, đừng tự bịa.
+
+MẪU:
+# Phần I. Trắc nghiệm
+**Câu 1:** Nội dung câu hỏi...
+A. ...
+B. ...
+C. ...
+D. ...
+**Lời giải:** ...
+**Chọn** A
+
+# Phần II. Đúng/Sai
+**Câu 1:** Nội dung dẫn...
+a) ...
+b) ...
+c) ...
+d) ...
+**Lời giải:** ...
+**Đáp án**: a) Đúng, b) Sai, c) Đúng, d) Sai
+
+# Phần III. Trả lời ngắn
+**Câu 1:** ...
+**Lời giải:** ...
+**Đáp số:** 12
+
+# Phần IV. Tự luận
+**Bài 1:** ...
+**Lời giải:** ...`;
+
 // Hàm chính — dùng khi file .tex/.txt upload lên có định dạng markdown mẫu
 // (nhận diện qua tiêu đề "**Phần I."), thay vì định dạng .tex cũ.
 function parseMarkdownExamToJSON(rawText: string) {
   const tikzList: { id: string; code: string }[] = [];
   const counter = { n: 0 };
-  const text = extractTikzMarkdown(rawText, tikzList, counter);
+  const imageList: { id: string; path: string }[] = [];
+  // TikZ tách TRƯỚC (giữ nguyên \includegraphics nằm trong tikz), rồi mới đổi ảnh ngoài tikz.
+  const text = extractImagesMarkdown(extractTikzMarkdown(rawText, tikzList, counter), imageList);
 
   // THAY ĐỔI: gom TẤT CẢ câu hỏi trong toàn văn bản (không cần đúng nằm dưới
   // tiêu đề "Phần" nào), rồi phân loại từng câu dựa vào DẤU HIỆU THỰC SỰ có
@@ -1284,6 +1735,7 @@ function parseMarkdownExamToJSON(rawText: string) {
     phan_3_TraLoiNgan,
     phan_4_TuLuan,
     tikz_list: tikzList,
+    image_list: imageList,
     thong_ke: {
       so_luong_tikz: tikzList.length,
       so_cau_phan_1: phan_1_TracNghiem.length,
@@ -2896,7 +3348,7 @@ function OpenBookIcon({ className }: { className?: string }) {
 // tự quay về 100% như mong đợi.
 const DEFAULT_EXAM_SETTINGS = {
   viewMode: 'azota' as 'azota' | 'a4', // Giao diện hiển thị đề
-  duration: 45, // Thời gian làm bài (phút)
+  duration: DEFAULT_EXAM_DURATION_MINUTES, // Thời gian làm bài (phút) — mặc định 90
   shuffle: false, // Trộn câu hỏi và đáp án
   // THÊM MỚI: 'after_close' = tự động mở lời giải khi tất cả đã thi xong
   // (giờ đóng đề của lớp + thời gian làm bài); 'custom_time' = GV tự đặt 1
@@ -2905,7 +3357,10 @@ const DEFAULT_EXAM_SETTINGS = {
   solutionOpenAt: '' as string, // ISO string, chỉ dùng khi showSolution = 'custom_time'
   // THÊM MỚI: số lần học sinh được TỰ làm lại (không cần GV bấm "Cho làm
   // lại"). 0 = không giới hạn (mặc định, theo đúng yêu cầu giáo viên).
-  maxAttempts: 0,
+  maxAttempts: DEFAULT_EXAM_MAX_ATTEMPTS, // mặc định 3 lần (0 = không giới hạn)
+  // THÊM MỚI (6-11): cách tính điểm khi học sinh làm nhiều lần — 'highest' (mặc
+  // định, lấy điểm CAO NHẤT) hoặc 'latest' (lấy lần làm cuối). Xem lib/scoreMode.ts.
+  scoreMode: 'highest' as 'highest' | 'latest',
   // THÊM MỚI (giờ mở/đóng đề MẶC ĐỊNH — áp dụng cho MỌI lớp được giao đề
   // này): trước đây giờ mở/đóng chỉ cấu hình được ở panel "Giao đề" của
   // TỪNG lớp riêng lẻ, nên giao 1 đề cho nhiều lớp cùng khung giờ phải
@@ -3011,6 +3466,10 @@ export default function ExamBuilder({
       const raw = localStorage.getItem('examBuilderManualFolders');
       if (raw) setManualFolders(JSON.parse(raw));
     } catch {}
+    try {
+      const rawOpen = localStorage.getItem('examBuilderOpenFolders');
+      if (rawOpen) setOpenFolders(JSON.parse(rawOpen));
+    } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -3025,6 +3484,12 @@ export default function ExamBuilder({
   // mặc định lấy theo tên tệp .tex vừa xử lý cho tiện, giáo viên có thể sửa
   // lại tuỳ ý trước khi bấm "Lưu đề thi lên MongoDB".
   const [examTitle, setExamTitle] = useState<string>('');
+  // SỬA LỖI: trước đây ô tên đề có value = examTitle || tên tệp, nên khi GV xoá
+  // hết chữ (examTitle = '') thì tên tệp cũ tự hiện lại -> không xoá được ký tự
+  // cuối cùng. Cờ này nhớ "GV đã tự gõ/xoá trong ô", khi true thì hiển thị đúng
+  // giá trị đang có (kể cả rỗng), không tự điền lại tên tệp nữa. Cờ được tắt
+  // khi mở/tạo/nạp đề khác để ô lại tự lấy tên tệp mới như cũ.
+  const [examTitleTouched, setExamTitleTouched] = useState(false);
   const [isSavingExamMongo, setIsSavingExamMongo] = useState(false);
   // THÊM MỚI (mục 2 — cập nhật đề đã lưu, giữ nguyên link): khi mở lại 1 đề
   // đã lưu qua loadSavedExam(), currentExamId ghi nhớ _id MongoDB của đề đó.
@@ -3121,6 +3586,20 @@ export default function ExamBuilder({
   // mục") — lưu localStorage để giữ được các thư mục CHƯA có đề nào trong
   // đó (MongoDB chỉ biết folder khi có ít nhất 1 đề mang tên đó).
   const [manualFolders, setManualFolders] = useState<string[]>([]);
+  // THÊM MỚI: trạng thái MỞ của từng thư mục trong "Danh sách đề đã lưu".
+  // Mặc định mọi thư mục THU GỌN (chỉ hiện tên + số đề); bấm vào tiêu đề thư
+  // mục mới xổ danh sách đề ra. Lưu localStorage để lần sau vào vẫn nhớ
+  // thư mục nào đang mở.
+  const [openFolders, setOpenFolders] = useState<string[]>([]);
+  const toggleFolderOpen = (key: string) => {
+    setOpenFolders((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      try {
+        localStorage.setItem('examBuilderOpenFolders', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
   const [updatingExamId, setUpdatingExamId] = useState<string | null>(null);
   const [deletingExamId, setDeletingExamId] = useState<string | null>(null);
   // THÊM MỚI: state cho luồng "Xuất bản - Lấy link" — showPublishErrorsModal
@@ -3135,6 +3614,8 @@ export default function ExamBuilder({
   // "Chia sẻ vào kho chung" — chỉ cần 1 boolean vì popup tự gọi API lấy
   // trạng thái chia sẻ hiện tại của currentExamId, không cần state nào khác.
   const [showShareToLibraryModal, setShowShareToLibraryModal] = useState(false);
+  // THÊM MỚI (25-10): popup biểu đồ cột thống kê theo câu của đề đang mở.
+  const [showStatsModal, setShowStatsModal] = useState(false);
 
   // Ảnh SVG trả về từ Hugging Face cho từng hình TikZ, khoá theo id
   // ([[HÌNH_TIKZ_n]]). Và tiến độ biên dịch để hiển thị thanh trạng thái.
@@ -4205,6 +4686,7 @@ export default function ExamBuilder({
     setPastedText('');
     setTexFileName('');
     setExamTitle('');
+    setExamTitleTouched(false);
     setImageMap({});
     setImageFolders([]);
     setBuilderSubTab('upload');
@@ -4243,6 +4725,7 @@ export default function ExamBuilder({
       // clone mà chưa có sẵn tiêu đề ở phía gọi) — không đổi hành vi của 2
       // lượt gọi cũ (title || ... không ảnh hưởng gì khi title đã có giá trị).
       setExamTitle(title || result.exam.title || '');
+      setExamTitleTouched(false);
       setTexFileName(title || result.exam.title || '');
       // THÊM MỚI (mục 2): ghi nhớ đang sửa đúng đề nào -> lần Lưu/Xuất bản
       // tiếp theo sẽ PATCH cập nhật lại bản ghi này (giữ nguyên link cũ),
@@ -4265,6 +4748,11 @@ export default function ExamBuilder({
           // B thực sự có lưu.
           ...DEFAULT_EXAM_SETTINGS,
           ...result.exam.settings,
+          // Đề cũ thiếu field => giữ luật cũ (không áp mặc định mới 90 phút/3 lần).
+          duration:
+            typeof result.exam.settings.duration === 'number' ? result.exam.settings.duration : LEGACY_EXAM_DURATION_MINUTES,
+          maxAttempts:
+            typeof result.exam.settings.maxAttempts === 'number' ? result.exam.settings.maxAttempts : LEGACY_EXAM_MAX_ATTEMPTS,
           // SỬA: {...s, ...result.exam.settings} ở trên ghi đè NGUYÊN cả
           // object scoring — đề CŨ lưu trước khi có tính năng Phần IV sẽ
           // thiếu p4PerQuestion trong settings.scoring đã lưu, khiến field
@@ -4438,9 +4926,9 @@ export default function ExamBuilder({
         try {
           const bbox = (svgEl as unknown as SVGGraphicsElement).getBBox();
           if (bbox.width > 0 && bbox.height > 0) {
-            const BASE_PADDING = 0.5;
-            const LARGE_GAP_THRESHOLD_PX = 10;
-            const SAFE_MARGIN_PX = 5;
+            const BASE_PADDING = 2; // 28-7: 0.5 -> 2 (khung bảng biến thiên mất đường kẻ trên/dưới)
+            const LARGE_GAP_THRESHOLD_PX = 30;
+            const SAFE_MARGIN_PX = 14; // hình cao bị khuất đầu/cuối: nới biên an toàn
             let vTop = bbox.y;
             let vBottom = bbox.y + bbox.height;
             const visible = getVisibleContentBBox(svgEl as unknown as SVGSVGElement);
@@ -5091,6 +5579,12 @@ export default function ExamBuilder({
       : (await import('./parser')).parseLatexToJSON(text);
 
     loadExamData(parsedData);
+    // SỬA LỖI (đè đề): đang mở đề 1 (currentExamId = id đề 1) rồi tải/dán đề 2 thì trước đây
+    // currentExamId vẫn là đề 1 nên bấm Lưu sẽ PATCH đè nội dung đề 2 lên đề 1. Tải/dán nội dung
+    // mới là bắt đầu 1 đề MỚI: bỏ liên kết với đề cũ và đưa cài đặt về mặc định (không "rớt" từ đề cũ).
+    // (Mở đề đã lưu đi qua loadSavedExam, không qua đây nên vẫn sửa đúng đề đó.)
+    setCurrentExamId(null);
+    setExamSettings(DEFAULT_EXAM_SETTINGS);
     // SỬA LỖI: sau khi tải file/dán nội dung xong, tự nhảy sang tab "Xem đề"
     // — trước đây thiếu dòng này nên chỉ luồng mở lại đề đã lưu (dòng ~4889)
     // mới tự chuyển tab, còn tải file mới/dán trực tiếp thì không.
@@ -5101,25 +5595,136 @@ export default function ExamBuilder({
     justLoadedExamRef.current = true;
   };
 
+  // THÊM MỚI: nạp 1 tệp đề — .zip (tệp .tex/.md + thư mục ảnh bên trong), hoặc
+  // .tex / .md / .markdown / .txt đơn lẻ. Dùng chung cho chọn tệp lẫn kéo-thả.
+  const MIME_BY_EXT: Record<string, string> = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+    bmp: 'image/bmp', svg: 'image/svg+xml', heic: 'image/heic', heif: 'image/heif', avif: 'image/avif',
+    tif: 'image/tiff', tiff: 'image/tiff',
+  };
+  // Hỏi xác nhận khi tải/dán đề mới lúc đang mở 1 đề đã lưu: phần chưa lưu của đề đang mở sẽ mất
+  // (đề đã lưu trong hệ thống thì không bị đụng tới).
+  const confirmReplaceOpenExam = () =>
+    !currentExamId ||
+    window.confirm(
+      'Đang mở một đề đã lưu. Tải/dán đề mới sẽ bỏ phần CHƯA LƯU của đề này (đề đã lưu vẫn còn nguyên). Tiếp tục?'
+    );
+
+  const loadExamFile = async (file: File) => {
+    if (!confirmReplaceOpenExam()) return;
+    const lower = file.name.toLowerCase();
+    // SỬA LỖI (26-7): reset examTitle để ô tiêu đề tự cập nhật theo tên tệp MỚI.
+    setExamTitle('');
+    setExamTitleTouched(false);
+
+    if (!lower.endsWith('.zip')) {
+      const raw = await file.text();
+      setTexFileName(file.name);
+      await processExamText(normalizeMarkdownExamText(raw));
+      return;
+    }
+
+    if (file.size > 60 * 1024 * 1024) {
+      alert('Tệp zip quá nặng (trên 60MB). Hãy nén lại ảnh nhỏ hơn rồi thử lại.');
+      return;
+    }
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = await JSZip.loadAsync(file);
+      const entries = Object.values(zip.files).filter((f) => {
+        if (f.dir) return false;
+        if (/(^|\/)__MACOSX\//.test(f.name)) return false;
+        const base = f.name.split('/').pop() || '';
+        return !base.startsWith('.') && !base.startsWith('~$');
+      });
+      if (entries.length > 1500) {
+        alert('Tệp zip có quá nhiều tệp (trên 1500). Chỉ nên gồm tệp đề và thư mục ảnh.');
+        return;
+      }
+
+      // 1) Tệp đề: ưu tiên .tex, rồi .md/.markdown, rồi .txt; nhiều tệp cùng loại -> lấy tệp dài nhất.
+      const extOf = (n: string) => (n.split('.').pop() || '').toLowerCase();
+      const rank = (n: string) => {
+        const e = extOf(n);
+        return e === 'tex' ? 0 : e === 'md' || e === 'markdown' ? 1 : e === 'txt' ? 2 : 99;
+      };
+      const textEntries = entries.filter((f) => rank(f.name) < 99);
+      if (textEntries.length === 0) {
+        alert('Không thấy tệp đề (.tex hoặc .md) trong file zip. Hãy đặt tệp đề trong zip cùng với thư mục ảnh.');
+        return;
+      }
+      const bestRank = Math.min(...textEntries.map((f) => rank(f.name)));
+      const candidates = textEntries.filter((f) => rank(f.name) === bestRank);
+      const texts = await Promise.all(candidates.map(async (f) => ({ f, s: await f.async('string') })));
+      texts.sort((a, b) => b.s.length - a.s.length);
+      const chosen = texts[0];
+
+      // 2) Ảnh: nạp vào imageMap theo TÊN FILE (khớp không phân biệt đuôi/hoa-thường như thư mục ảnh).
+      const map: Record<string, string> = {};
+      let count = 0;
+      let skippedBig = 0;
+      for (const f of entries) {
+        const ext = extOf(f.name);
+        if (!IMAGE_EXTENSIONS.includes(ext)) continue;
+        const bytes = await f.async('uint8array');
+        if (bytes.length > 15 * 1024 * 1024) {
+          skippedBig++;
+          continue;
+        }
+        const baseName = f.name.split('/').pop() || f.name;
+        const imgFile = new File([bytes as BlobPart], baseName, { type: MIME_BY_EXT[ext] || 'image/png' });
+        map[baseName] = URL.createObjectURL(imgFile);
+        imageFileMapRef.current[baseName] = imgFile;
+        count++;
+      }
+      const label = `📦 ${file.name}`;
+      setImageMap((prev) => ({ ...prev, ...map }));
+      if (count > 0) {
+        setImageFolders((prev) =>
+          prev.some((x) => x.name === label) ? prev.map((x) => (x.name === label ? { name: label, count } : x)) : [...prev, { name: label, count }]
+        );
+      }
+      setTexFileName(`${file.name} › ${chosen.f.name.split('/').pop()}`);
+      await processExamText(normalizeMarkdownExamText(chosen.s));
+      if (skippedBig > 0) alert(`Có ${skippedBig} ảnh trên 15MB trong zip nên bị bỏ qua. Hãy nén nhỏ rồi nạp lại.`);
+    } catch (err) {
+      console.error('Lỗi đọc zip:', err);
+      alert('Không đọc được file zip này. Hãy kiểm tra lại file (nén dạng .zip thông thường).');
+    }
+  };
+
+  // THÊM MỚI: dùng thử nhanh bằng đề mẫu (không cần chuẩn bị file).
+  const [loadingSample, setLoadingSample] = useState(false);
+  const loadSampleExam = async () => {
+    if (!confirmReplaceOpenExam()) return;
+    setLoadingSample(true);
+    try {
+      const imgs = await buildSampleImages();
+      const map: Record<string, string> = {};
+      for (const im of imgs) {
+        const f = new File([im.blob], im.name, { type: 'image/png' });
+        map[im.name] = URL.createObjectURL(f);
+        imageFileMapRef.current[im.name] = f;
+      }
+      const label = '📘 Ảnh đề mẫu';
+      setImageMap((prev) => ({ ...prev, ...map }));
+      setImageFolders((prev) => (prev.some((x) => x.name === label) ? prev : [...prev, { name: label, count: imgs.length }]));
+      setExamTitle('');
+      setExamTitleTouched(false);
+      setTexFileName('📘 Đề mẫu (dùng thử)');
+      await processExamText(normalizeMarkdownExamText(SAMPLE_EXAM_TEX));
+    } catch (err) {
+      console.error('Lỗi nạp đề mẫu:', err);
+      alert('Không nạp được đề mẫu, thử lại nhé.');
+    } finally {
+      setLoadingSample(false);
+    }
+  };
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    // THÊM MỚI: ghim tên tệp hiện tại — nếu người dùng chọn LẠI đúng tệp này
-    // (đã reset input value bên dưới nên onChange vẫn bắn ra), processExamText
-    // vẫn chạy lại toàn bộ luồng parse + biên dịch nên nội dung LUÔN được cập
-    // nhật, không bị "tưởng nhầm là không đổi gì" chỉ vì tên tệp giống nhau.
-    // SỬA LỖI (26-7, "tải file .tex khác nhưng tên đề cũ vẫn còn"): examTitle
-    // là state RIÊNG với texFileName — nếu đã có giá trị từ trước (gõ tay
-    // hoặc từ đề đã mở trước đó) thì ô tiêu đề (examTitle || texFileName...)
-    // sẽ ưu tiên giữ giá trị CŨ này, không tự cập nhật theo tên file MỚI vừa
-    // chọn. Phải reset về '' ở đây để rơi về đúng nhánh lấy tên file mới.
-    setExamTitle('');
-    setTexFileName(file.name);
-    await processExamText(text);
-    // Cho phép chọn lại đúng file vừa upload (nếu người dùng bấm lại) — nếu
-    // không reset value, trình duyệt coi là "không đổi" nên sẽ không bắn lại
-    // sự kiện onChange.
+    await loadExamFile(file);
+    // Cho phép chọn lại đúng tệp vừa nạp (reset value để onChange bắn lại).
     e.target.value = '';
   };
 
@@ -5142,13 +5747,7 @@ export default function ExamBuilder({
     setIsDraggingFile(false);
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    // SỬA LỖI (26-7, cùng lỗi với handleFileUpload): reset examTitle để ô
-    // tiêu đề tự cập nhật theo tên file MỚI vừa kéo-thả vào, không giữ tên
-    // đề cũ còn sót lại từ trước.
-    setExamTitle('');
-    setTexFileName(file.name);
-    await processExamText(text);
+    await loadExamFile(file);
   };
 
   // THÊM MỚI: ô nhập cho phép dán trực tiếp nội dung .tex (không cần lưu ra
@@ -5160,13 +5759,15 @@ export default function ExamBuilder({
   const handleProcessPastedText = async () => {
     const text = pastedText.trim();
     if (!text) return;
+    if (!confirmReplaceOpenExam()) return;
     setIsProcessingPaste(true);
     try {
       // SỬA LỖI (26-7, cùng lỗi với handleFileUpload): reset examTitle để ô
       // tiêu đề không giữ tên đề cũ còn sót lại từ trước khi dán nội dung mới.
       setExamTitle('');
+      setExamTitleTouched(false);
       setTexFileName('📋 Nội dung dán trực tiếp');
-      await processExamText(text);
+      await processExamText(normalizeMarkdownExamText(text));
     } finally {
       setIsProcessingPaste(false);
     }
@@ -5614,7 +6215,7 @@ export default function ExamBuilder({
         </div>
       </div>
 
-      <div className={`mx-auto px-4 ${builderSubTab === 'view' ? 'max-w-[1600px]' : 'max-w-6xl'}`}>
+      <div className="mx-auto px-4 max-w-6xl">
         {/* THÊM MỚI: thanh trạng thái "đóng băng" 2 nguồn dữ liệu hiện tại
             (tệp/nội dung đề .tex + các thư mục ảnh đã chọn) — luôn hiển thị
             RÕ đang dùng đúng nguồn nào thay vì phải nhớ đã bấm nút nào lúc
@@ -5810,6 +6411,23 @@ export default function ExamBuilder({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-8 items-stretch">
           {/* Cột trái */}
           <div className="lg:col-span-5 flex flex-col gap-4">
+            {/* Đề mẫu cho người dùng lần đầu — cùng phong cách với các khối
+                bên dưới (nền trắng, viền xám, bo xl, nút xanh dương). */}
+            <div className="bg-white border border-gray-200 p-5 rounded-xl shadow-sm text-center">
+              <p className="text-gray-700 mb-1 font-semibold text-sm">Lần đầu dùng? Thử nhanh bằng đề mẫu</p>
+              <p className="text-xs text-gray-400 mb-3">
+                Đề mẫu có đủ 4 phần và hình vẽ, không cần chuẩn bị file hay biết LaTeX.
+              </p>
+              <button
+                type="button"
+                onClick={loadSampleExam}
+                disabled={loadingSample}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
+              >
+                {loadingSample ? 'Đang nạp…' : 'Dùng đề mẫu ngay'}
+              </button>
+            </div>
+
             {/* Nút Upload đề */}
             <div
               onDragOver={handleDragOverUpload}
@@ -5823,8 +6441,11 @@ export default function ExamBuilder({
                   chữ, không icon, cho gọn mắt. Input file thật vẫn tồn tại
                   (ẩn bằng class hidden) để giữ nguyên logic chọn file/kéo-thả
                   cũ, chỉ đổi phần hiển thị. */}
-              <p className="text-gray-600 mb-3 font-medium text-sm">Kéo thả hoặc bấm nút bên dưới để chọn file đề thi gốc (.tex)</p>
-              <input id="tex-file-input" type="file" accept=".tex" onChange={handleFileUpload} className="hidden" />
+              <p className="text-gray-600 mb-1 font-medium text-sm">Kéo thả hoặc bấm nút bên dưới để chọn file đề thi</p>
+              <p className="text-xs text-gray-400 mb-3">
+                <b>.zip</b> (tệp .tex hoặc .md + thư mục ảnh) · <b>.tex</b> · <b>.md</b>
+              </p>
+              <input id="tex-file-input" type="file" accept=".tex,.md,.markdown,.txt,.zip,application/zip" onChange={handleFileUpload} className="hidden" />
               <label
                 htmlFor="tex-file-input"
                 className="inline-flex items-center gap-2 px-4 py-2 border-2 border-dashed border-blue-300 rounded-lg text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 cursor-pointer transition"
@@ -5838,6 +6459,30 @@ export default function ExamBuilder({
               )}
             </div>
 
+            {/* THÊM MỚI: hướng dẫn cho người không biết LaTeX — dùng AI OCR ra .md + ảnh cắt/vẽ */}
+            <details className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 text-sm">
+              <summary className="cursor-pointer font-semibold text-gray-700">Không biết LaTeX? Dùng AI để OCR đề</summary>
+              <ol className="mt-2 list-decimal pl-5 text-xs text-gray-600 space-y-1">
+                <li>Gửi ảnh/PDF đề cho AI (ChatGPT, Gemini, Claude…) kèm <b>prompt mẫu</b> bên dưới để AI trả ra file <b>.md</b>.</li>
+                <li>Hình vẽ/đồ thị: cắt ảnh (hoặc nhờ AI vẽ) rồi lưu vào thư mục <span className="font-mono">images</span>, tên trùng với tên trong file .md (ví dụ <span className="font-mono">![](images/hinh1.png)</span>).</li>
+                <li>Nén <b>file .md + thư mục images</b> thành 1 file <b>.zip</b> rồi tải lên ở trên. Hoặc chỉ tải riêng file .md (rồi chọn thư mục ảnh).</li>
+                <li>Đề chưa có đáp án? Vẫn nhập được — đặt đáp án đúng sau ở màn <b>Xem đề</b>.</li>
+              </ol>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(AI_OCR_PROMPT).then(
+                    () => alert('Đã sao chép prompt mẫu. Dán vào AI cùng ảnh/PDF đề.'),
+                    () => alert('Không sao chép được, hãy bôi đen prompt bên dưới rồi copy.')
+                  );
+                }}
+                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100"
+              >
+                Sao chép prompt mẫu
+              </button>
+              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] bg-gray-50 border border-gray-200 rounded-lg p-2 text-gray-600">{AI_OCR_PROMPT}</pre>
+            </details>
+
             {/* THÊM MỚI: Chọn THƯ MỤC ẢNH — hỗ trợ chọn NHIỀU LẦN/NHIỀU THƯ
                 MỤC khác nhau, ảnh sẽ được GỘP lại (không ghi đè), mỗi thư
                 mục hiện thành 1 dòng riêng ở thanh trạng thái phía trên. */}
@@ -5849,7 +6494,7 @@ export default function ExamBuilder({
                 Chọn thư mục ảnh <span className="text-gray-400 font-normal">(chọn được nhiều thư mục)</span>
               </p>
               <p className="text-xs text-gray-400 mb-3">
-                Dùng cho hình <span className="font-mono">\includegraphics</span> — cả ngoài tikz lẫn chèn cứng bên trong tikz.
+                Dùng cho hình <span className="font-mono">\includegraphics</span> hoặc <span className="font-mono">![](images/…)</span> — cả ngoài tikz lẫn chèn cứng bên trong tikz.
               </p>
               <label
                 htmlFor="image-folder-input"
@@ -5871,7 +6516,7 @@ export default function ExamBuilder({
               cuộn liên tục lúc kiểm tra lại trước khi xử lý. */}
           <div className="lg:col-span-7 bg-white border border-gray-200 p-5 rounded-xl shadow-sm flex flex-col">
             <p className="text-gray-600 mb-2 font-medium text-sm inline-flex items-center gap-1.5">
-              <WritingIcon className="w-4 h-4 text-gray-500" /> Hoặc dán trực tiếp nội dung .tex vào ô bên dưới
+              <WritingIcon className="w-4 h-4 text-gray-500" /> Hoặc dán trực tiếp nội dung .tex / .md vào ô bên dưới
             </p>
             <textarea
               value={pastedText}
@@ -5967,6 +6612,22 @@ export default function ExamBuilder({
                         onChange={(e) => setExamSettings((s) => ({ ...s, maxAttempts: Math.max(0, Number(e.target.value) || 0) }))}
                         className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm font-bold text-blue-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
                       />
+                    </label>
+                    {/* THÊM MỚI (6-11): cách lấy điểm khi làm nhiều lần. */}
+                    <label className="block">
+                      <span className="text-xs text-gray-600 font-semibold block mb-1">
+                        🏆 Cách tính điểm (khi làm nhiều lần)
+                      </span>
+                      <select
+                        value={examSettings.scoreMode}
+                        onChange={(e) =>
+                          setExamSettings((s) => ({ ...s, scoreMode: e.target.value === 'latest' ? 'latest' : 'highest' }))
+                        }
+                        className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm font-bold text-blue-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      >
+                        <option value="highest">Lấy điểm cao nhất</option>
+                        <option value="latest">Lấy điểm lần làm cuối</option>
+                      </select>
                     </label>
                   </div>
 
@@ -6283,8 +6944,11 @@ export default function ExamBuilder({
                     </span>
                     <input
                       type="text"
-                      value={examTitle || texFileName.replace(/\.[^/.]+$/, '')}
-                      onChange={(e) => setExamTitle(e.target.value)}
+                      value={examTitleTouched ? examTitle : (examTitle || texFileName.replace(/\.[^/.]+$/, ''))}
+                      onChange={(e) => {
+                        setExamTitleTouched(true);
+                        setExamTitle(e.target.value);
+                      }}
                       placeholder="Tên đề thi..."
                       className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm font-bold text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
@@ -6383,6 +7047,15 @@ export default function ExamBuilder({
                         Chia sẻ vào kho chung
                       </button>
                     )}
+                    {currentExamId && (
+                      <button
+                        type="button"
+                        onClick={() => setShowStatsModal(true)}
+                        className="inline-flex items-center gap-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 font-semibold text-sm py-2 px-4 rounded"
+                      >
+                        Thống kê theo câu
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -6471,7 +7144,11 @@ export default function ExamBuilder({
                 // max-w-6xl (72rem) lên max-w-[1600px] kèm w-full để lấp hết
                 // khoảng rộng đó trên màn hình lớn, đỡ chật khi câu hỏi có
                 // bảng/hình TikZ dài.
-                : 'max-w-[1600px] w-full mx-auto bg-transparent'
+                // SỬA (yêu cầu 25-10: "Xem đề quá rộng, muốn bằng trang thi"):
+                // thu về max-w-3xl — ĐÚNG bề rộng khung làm bài của học sinh
+                // (StudentTakeExam: "max-w-3xl mx-auto"), để GV thấy chữ/hình
+                // xuống dòng y hệt trang thi thật.
+                : 'max-w-3xl w-full mx-auto bg-transparent'
             }
           >
             {/* SỬA (khiếu nại: bỏ 4 tab con Phần I/II/III/IV — GV phải bấm
@@ -6837,12 +7514,29 @@ export default function ExamBuilder({
 
                 return (
                   <div className="flex flex-col gap-6">
-                    {sectionKeys.map((folderName) => (
-                      <div key={folderName || '__unfiled__'}>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-                          🗂️ {folderName || 'Chưa phân loại'} <span className="font-normal text-slate-400">({(groups[folderName] || []).length} đề)</span>
-                        </p>
-                        {(groups[folderName] || []).length === 0 ? (
+                    {sectionKeys.map((folderName) => {
+                      const folderKey = folderName || '__unfiled__';
+                      const isOpen = openFolders.includes(folderKey);
+                      const folderCount = (groups[folderName] || []).length;
+                      // Nhóm "Chưa phân loại" rỗng thì không cần hiện.
+                      if (folderName === '' && folderCount === 0) return null;
+                      return (
+                      <div key={folderKey} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => toggleFolderOpen(folderKey)}
+                          aria-expanded={isOpen}
+                          className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-50 hover:bg-slate-100 transition text-left"
+                        >
+                          <span className="text-slate-400 text-xs w-3 inline-block">{isOpen ? '▼' : '▶'}</span>
+                          <span className="text-sm font-bold text-slate-700">
+                            {isOpen ? '📂' : '📁'} {folderName || 'Chưa phân loại'}
+                          </span>
+                          <span className="text-xs font-normal text-slate-400">({folderCount} đề)</span>
+                        </button>
+                        {isOpen && (
+                        <div className="p-2">
+                        {folderCount === 0 ? (
                           <p className="text-xs text-gray-400 italic mb-2">Thư mục trống — chuyển đề vào đây bằng dropdown bên dưới.</p>
                         ) : (
                           <div className="flex flex-col gap-2">
@@ -6925,8 +7619,11 @@ export default function ExamBuilder({
                             ))}
                           </div>
                         )}
+                        </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 );
               })()
@@ -7280,6 +7977,11 @@ export default function ExamBuilder({
       {/* THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): popup "Chia
           sẻ vào kho chung" — chỉ render khi có currentExamId (nút bấm mở
           popup đã tự ẩn nếu chưa có, xem phía trên). */}
+      {showStatsModal && currentExamId && mounted && createPortal(
+        <ExamStatsModal examId={currentExamId} examTitle={examTitle} onClose={() => setShowStatsModal(false)} />,
+        document.body
+      )}
+
       {showShareToLibraryModal && currentExamId && mounted && createPortal(
         <ShareToLibraryModal
           examId={currentExamId}

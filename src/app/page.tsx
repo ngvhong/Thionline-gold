@@ -12,11 +12,14 @@ import { gradeExam, computeEssayMax, round2 } from '@/lib/grading';
 import { AppLogoIcon, APP_NAME } from '@/components/AppBranding';
 import { isAdminEmail, ADMIN_CONTACT } from '@/lib/adminConfig';
 import EssayAnnotator from '@/components/EssayAnnotator';
+import { essayQuickValues } from '@/lib/essayQuickScores';
 import { useInAppBrowserWarning } from '@/lib/useInAppBrowserWarning';
 import { AiHelpWidget } from '@/components/AiHelpWidget';
 // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): mục quản trị cây
 // thư mục kho đề chung, xem AdminTab bên dưới.
 import LibraryAdminSection from './LibraryAdminSection';
+import AdminStudentAccountsSection from './AdminStudentAccountsSection';
+import { DEFAULT_EXAM_DURATION_MINUTES, DEFAULT_EXAM_MAX_ATTEMPTS } from '@/lib/examDefaults';
 
 // THÊM LẠI (theo yêu cầu mới nhất): trước đây từng bỏ tab "Trang chủ" theo
 // khiếu nại "chỉ nên có 2 tab", giờ GV muốn có lại — quay về đủ 3 tab.
@@ -113,6 +116,10 @@ type AdminStats = {
   expiredFreeCount: number;
   // THÊM MỚI: khớp 4 field trả thêm ở GET /api/admin/stats.
   liveExamCount: number;
+  // 25-10: tách HS trong lớp / thí sinh tự do + top đề đang có người làm.
+  liveClassCount?: number;
+  liveFreeCount?: number;
+  liveByExam?: { examId: string; title: string; total: number; free: number }[];
   studentAccountCount: number;
   activeTeachers7d: number;
   activeStudents7d: number;
@@ -132,6 +139,8 @@ type AdminAiSettings = {
   // (tạm không nhận đăng ký mới nào), xem registrationMode trong
   // appSettingsModel.ts.
   registrationMode: 'open' | 'approval' | 'closed';
+  // THÊM MỚI (25-10): bắt buộc xác nhận email hay không (mặc định false).
+  requireEmailVerification: boolean;
 };
 
 // THÊM MỚI: chi tiết lớp/đề thi của 1 GV, tải khi admin bấm mở rộng 1 dòng
@@ -157,6 +166,8 @@ type LiveStudent = {
   examId: string;
   examTitle: string;
   started_at: string | null;
+  // Giờ hết hạn làm bài (ms epoch) — để ẩn dòng ngay khi hết giờ, không cần gọi lại API.
+  endAt?: number | null;
 };
 
 type ClassItem = {
@@ -419,43 +430,7 @@ function EyeIcon({ className }: { className?: string }) {
   );
 }
 
-// THÊM MỚI: icon "bó hoa chào mừng" nét mảnh — thay icon bàn tay vẫy chào
-// (tiêu đề chào mừng ở Trang chủ) để đồng bộ hình thức với các icon khác
-// trong app.
-function BouquetIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      {/* Cuống hoa bó lại */}
-      <path d="M12 13.5 9 21.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M12 13.5 12 21.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M12 13.5 15 21.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M9.5 18.3h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Hoa bên trái */}
-      <circle cx="6.6" cy="7.4" r="1.7" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="9.1" cy="5.6" r="1.7" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="4.9" cy="4.9" r="1.7" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="6.9" cy="3.1" r="1.7" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M6.7 8.9 10.2 12.3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      {/* Hoa giữa, cao nhất */}
-      <circle cx="12" cy="6" r="1.9" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="12" cy="3.1" r="1.9" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="9.9" cy="4.6" r="1.9" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="14.1" cy="4.6" r="1.9" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M12 8 12 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      {/* Hoa bên phải */}
-      <circle cx="17.3" cy="7.4" r="1.6" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="15" cy="5.9" r="1.6" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="19" cy="5.4" r="1.6" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="16.9" cy="3.7" r="1.6" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M17.1 8.7 13.6 12.3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      {/* Vài chiếc lá nhỏ trên cuống */}
-      <path d="M9.6 16.2c-1.1-.3-1.9-1.1-2-2.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-      <path d="M14.4 16.2c1.1-.3 1.9-1.1 2-2.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-// THÊM MỚI: gộp các icon emoji còn lại (✕, 🔗, 🗂️, 📄, 🚪, 📱, ☰) thành SVG
+// THÊM MỚI: gộp các icon emoji còn lại (✕, 🔗, 🗂️, 📄, 🚪, ☰) thành SVG
 // nét mảnh tự vẽ, đồng bộ 1 kiểu với các icon phía trên — không phụ thuộc
 // font/emoji của từng hệ điều hành.
 function CloseIcon({ className }: { className?: string }) {
@@ -745,6 +720,7 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
   // khỏi `detail` để gõ số mượt (không phải load lại toàn bộ modal mỗi lần
   // gõ) — key = questionId.
   const [essayScoreInputs, setEssayScoreInputs] = useState<Record<string, string>>({});
+  const [essayCommentInputs, setEssayCommentInputs] = useState<Record<string, string>>({});
   const [savingEssayQuestion, setSavingEssayQuestion] = useState<string | null>(null);
   const [essayScoreErrors, setEssayScoreErrors] = useState<Record<string, string>>({});
   // Ảnh đang mở trong công cụ "Chấm trên ảnh" — null = đóng.
@@ -761,6 +737,7 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
         setEssayScoreInputs(
           Object.fromEntries(Object.entries(scores).map(([qid, v]) => [qid, String(v)]))
         );
+        setEssayCommentInputs({ ...(data.submission.essayComments || {}) });
       } catch (err: any) {
         setError(err.message || 'Không tải được bài làm.');
       } finally {
@@ -782,13 +759,13 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
       const res = await fetch(`/api/submissions/${submissionId}/essay-score`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questionId, score: value }),
+        body: JSON.stringify({ questionId, score: value, comment: essayCommentInputs[questionId] ?? '' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Không lưu được điểm.');
       setDetail((prev: any) => ({
         ...prev,
-        submission: { ...prev.submission, essayScores: data.essayScores, essayGraded: data.essayGraded },
+        submission: { ...prev.submission, essayScores: data.essayScores, essayGraded: data.essayGraded, essayComments: data.essayComments },
       }));
     } catch (err: any) {
       setEssayScoreErrors((prev) => ({ ...prev, [questionId]: err.message || 'Không lưu được điểm.' }));
@@ -941,7 +918,7 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
                                       <button
                                         type="button"
                                         onClick={() => setAnnotating({ questionId: q.id, imageIndex: idx, url: displayUrl })}
-                                        title="Bấm để chấm trên ảnh (bút đỏ)"
+                                        title="Bấm để chấm trên ảnh"
                                         className="block"
                                       >
                                         <img
@@ -965,6 +942,27 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
                               <p className="text-xs text-gray-400 italic mb-3">Học sinh chưa nộp ảnh câu này.</p>
                             )}
 
+                            <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                              <span className="text-xs text-gray-500">Chấm nhanh:</span>
+                              {essayQuickValues(essayQuestions.length ? essayMaxScore / essayQuestions.length : 1).map((v) => (
+                                <button
+                                  key={v}
+                                  type="button"
+                                  onClick={() => setEssayScoreInputs((prev) => ({ ...prev, [q.id]: String(v) }))}
+                                  className="text-xs px-2 py-0.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50"
+                                >
+                                  {v}
+                                </button>
+                              ))}
+                            </div>
+                            <input
+                              type="text"
+                              maxLength={500}
+                              placeholder="Nhận xét cho học sinh (không bắt buộc)"
+                              value={essayCommentInputs[q.id] ?? ''}
+                              onChange={(e) => setEssayCommentInputs((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                            />
                             <div className="flex items-center gap-2 flex-wrap">
                               <label className="text-xs font-medium text-gray-600">Điểm câu {i + 1}:</label>
                               <input
@@ -1424,9 +1422,10 @@ function AssignExamPanel({
   const [examDefaultSettings, setExamDefaultSettings] = useState<any>({});
   const [useCustomSettings, setUseCustomSettings] = useState(false);
   const [customSettings, setCustomSettings] = useState({
-    duration: 45,
+    duration: DEFAULT_EXAM_DURATION_MINUTES,
     shuffle: false,
-    maxAttempts: 0,
+    maxAttempts: DEFAULT_EXAM_MAX_ATTEMPTS,
+    scoreMode: 'highest' as 'highest' | 'latest',
     showSolution: 'after_submit' as 'after_submit' | 'never' | 'after_close' | 'custom_time',
     solutionOpenAt: '',
     openAt: '',
@@ -1460,6 +1459,7 @@ function AssignExamPanel({
           duration: Number(merged.duration) || 45,
           shuffle: !!merged.shuffle,
           maxAttempts: Number(merged.maxAttempts) || 0,
+          scoreMode: (merged.scoreMode === 'latest' ? 'latest' : 'highest') as 'highest' | 'latest',
           showSolution: merged.showSolution || 'after_submit',
           solutionOpenAt: isoToDatetimeLocal(merged.solutionOpenAt || null),
           openAt: isoToDatetimeLocal(merged.openAt || null),
@@ -1492,6 +1492,7 @@ function AssignExamPanel({
                 duration: Math.max(1, Number(customSettings.duration) || 45),
                 shuffle: customSettings.shuffle,
                 maxAttempts: Math.max(0, Number(customSettings.maxAttempts) || 0),
+                scoreMode: customSettings.scoreMode,
                 showSolution: customSettings.showSolution,
                 solutionOpenAt: datetimeLocalToIso(customSettings.solutionOpenAt),
                 openAt: datetimeLocalToIso(customSettings.openAt),
@@ -1712,6 +1713,17 @@ function AssignExamPanel({
                         className="w-full border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-200"
                       />
                     </label>
+                    <label className="block">
+                      <span className="text-[11px] text-amber-700 block mb-1">Cách tính điểm (làm nhiều lần)</span>
+                      <select
+                        value={customSettings.scoreMode}
+                        onChange={(e) => setCustomSettings((s) => ({ ...s, scoreMode: e.target.value === 'latest' ? 'latest' : 'highest' }))}
+                        className="w-full border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                      >
+                        <option value="highest">Lấy điểm cao nhất</option>
+                        <option value="latest">Lấy điểm lần làm cuối</option>
+                      </select>
+                    </label>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -1880,9 +1892,9 @@ function ClassesTab() {
   const [loadingScoreExportExams, setLoadingScoreExportExams] = useState(false);
   const [selectedScoreExportExamIds, setSelectedScoreExportExamIds] = useState<string[]>([]);
   // THÊM MỚI: cách tính điểm khi 1 học sinh làm 1 đề nhiều lần — mặc định
-  // 'latest' (giữ đúng hành vi cũ), GV có thể đổi sang 'highest' ngay trong
-  // menu xuất trước khi bấm tải. Xem type ScoreMode trong scoreTable.ts.
-  const [scoreExportMode, setScoreExportMode] = useState<'latest' | 'highest'>('latest');
+  // 'auto' (theo cài đặt từng đề — mặc định đề là điểm CAO NHẤT), GV có thể ép
+  // 'highest'/'latest' ngay trong menu xuất. Xem lib/scoreMode.ts.
+  const [scoreExportMode, setScoreExportMode] = useState<'auto' | 'latest' | 'highest'>('auto');
   // SỬA LỖI TỐC ĐỘ (khiếu nại: "hiện danh sách cực kì chậm"): TRƯỚC ĐÂY mỗi
   // lần bấm mở menu "Bảng điểm" đều gọi lại API format=list từ đầu, kể cả
   // khi vừa mở/đóng menu này liên tục cho ĐÚNG 1 lớp — GV thấy "Đang tải
@@ -2599,10 +2611,22 @@ function ClassesTab() {
                         </div>
                       )}
                     </div>
+                    <div className="px-4 py-2 border-t border-gray-100 mt-1">
+                      <span className="text-[11px] text-gray-500 block mb-1">Cách tính điểm (làm nhiều lần)</span>
+                      <select
+                        value={scoreExportMode}
+                        onChange={(e) => setScoreExportMode(e.target.value as 'auto' | 'latest' | 'highest')}
+                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white text-gray-700"
+                      >
+                        <option value="auto">Theo cài đặt của từng đề</option>
+                        <option value="highest">Điểm cao nhất</option>
+                        <option value="latest">Điểm lần làm cuối</option>
+                      </select>
+                    </div>
                     <a
                       href={`/api/classes/${selectedClass._id}/score-export?format=xlsx${
                         selectedScoreExportExamIds.length > 0 ? `&examIds=${selectedScoreExportExamIds.join(',')}` : ''
-                      }`}
+                      }${scoreExportMode !== 'auto' ? `&scoreMode=${scoreExportMode}` : ''}`}
                       onClick={() => setShowScoreExportMenu(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                     >
@@ -2611,7 +2635,7 @@ function ClassesTab() {
                     <a
                       href={`/api/classes/${selectedClass._id}/score-export?format=docx${
                         selectedScoreExportExamIds.length > 0 ? `&examIds=${selectedScoreExportExamIds.join(',')}` : ''
-                      }`}
+                      }${scoreExportMode !== 'auto' ? `&scoreMode=${scoreExportMode}` : ''}`}
                       onClick={() => setShowScoreExportMenu(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                     >
@@ -3017,6 +3041,8 @@ function AiSettingsPanel() {
   // lưu..." đúng dòng đang chờ, không bị lẫn giữa 3 lựa chọn.
   const [regModeSaving, setRegModeSaving] = useState<'open' | 'approval' | 'closed' | null>(null);
   const [regModeError, setRegModeError] = useState('');
+  const [emailVerifySaving, setEmailVerifySaving] = useState(false);
+  const [emailVerifyError, setEmailVerifyError] = useState('');
 
   async function load() {
     setLoading(true);
@@ -3109,6 +3135,23 @@ function AiSettingsPanel() {
     }
   }
 
+  async function handleSaveRequireEmailVerification(required: boolean) {
+    if (emailVerifySaving || required === !!settings?.requireEmailVerification) return;
+    setEmailVerifySaving(true);
+    setEmailVerifyError('');
+    try {
+      const data = await apiFetch<AdminAiSettings>('/api/admin/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ requireEmailVerification: required }),
+      });
+      setSettings(data);
+    } catch (err: any) {
+      setEmailVerifyError(err.message || 'Không lưu được cài đặt xác nhận email, thử lại nhé.');
+    } finally {
+      setEmailVerifySaving(false);
+    }
+  }
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
@@ -3151,7 +3194,8 @@ function AiSettingsPanel() {
       {/* THÊM MỚI (Phần 2b — gói dùng free/vĩnh viễn): khối cấu hình số
           ngày dùng thử mặc định — tách bằng đường kẻ trên, cùng khung với
           key Gemini cho gọn (2 cấu hình app đều lưu qua chung 1 route). */}
-      <div className="border-t border-gray-100 mt-4 pt-4">
+      {/* (25-10) Bỏ dùng thử: ẩn khối cấu hình số ngày — app miễn phí hoàn toàn. */}
+      <div className="hidden border-t border-gray-100 mt-4 pt-4">
         <h4 className="font-bold text-gray-900 text-sm mb-1">Số ngày dùng thử miễn phí mặc định</h4>
         <p className="text-xs text-gray-500 mb-3">
           Áp dụng cho tài khoản GV đăng ký MỚI kể từ lúc lưu — không ảnh hưởng hạn của tài khoản đã đăng ký từ trước.
@@ -3219,6 +3263,43 @@ function AiSettingsPanel() {
         </div>
         {regModeError && <p className="text-xs text-red-600 mt-2">{regModeError}</p>}
       </div>
+
+      {/* THÊM MỚI (25-10): bật/tắt bắt buộc xác nhận email khi đăng ký. Mặc định
+          TẮT — đăng ký xong dùng ngay, không gửi email xác nhận. */}
+      <div className="border-t border-gray-100 mt-4 pt-4">
+        <h4 className="font-bold text-gray-900 text-sm mb-1">Xác nhận email khi đăng ký</h4>
+        <p className="text-xs text-gray-500 mb-3">
+          Tắt (mặc định): đăng ký xong dùng được ngay, hệ thống không gửi email xác nhận. Bật: tài khoản chưa xác nhận email thì chưa dùng được app (kể cả tài khoản đã đăng ký trong lúc đang tắt, họ sẽ được yêu cầu xác nhận lần đăng nhập kế tiếp).
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          {(
+            [
+              { value: false, label: 'Không bắt buộc', desc: 'Dùng ngay sau khi đăng ký (mặc định)' },
+              { value: true, label: 'Bắt buộc', desc: 'Phải bấm link trong email mới dùng được' },
+            ]
+          ).map((opt) => {
+            const isActive = !!settings?.requireEmailVerification === opt.value;
+            return (
+              <button
+                key={String(opt.value)}
+                type="button"
+                onClick={() => handleSaveRequireEmailVerification(opt.value)}
+                disabled={emailVerifySaving || loading}
+                title={opt.desc}
+                className={`flex-1 text-left border rounded-lg px-3 py-2 text-sm transition-colors disabled:opacity-50 ${
+                  isActive
+                    ? 'border-blue-500 bg-blue-50 text-blue-700 font-semibold'
+                    : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {emailVerifySaving && !isActive ? 'Đang lưu...' : opt.label}
+                <span className="block text-[11px] font-normal text-gray-400 mt-0.5">{opt.desc}</span>
+              </button>
+            );
+          })}
+        </div>
+        {emailVerifyError && <p className="text-xs text-red-600 mt-2">{emailVerifyError}</p>}
+      </div>
     </div>
   );
 }
@@ -3278,7 +3359,7 @@ function AdminTab() {
   // GV / Cấu hình AI / Nhật ký) — mỗi lúc chỉ hiện đúng 1 mục, đỡ rối mắt.
   // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): thêm mục
   // 'library' — chỉ quản lý cấu trúc cây thư mục, xem LibraryAdminSection.
-  const [section, setSection] = useState<'overview' | 'teachers' | 'settings' | 'logs' | 'library'>('overview');
+  const [section, setSection] = useState<'overview' | 'teachers' | 'students' | 'settings' | 'logs' | 'library'>('overview');
   // THÊM MỚI: gộp các nút thao tác theo dòng (Gia hạn/Vĩnh viễn/Thay mặt/
   // Khoá) — trước đây xếp thành 1 hàng chữ dài trong bảng — vào 1 menu
   // "···" bấm mới hiện, chỉ 1 menu mở tại 1 thời điểm.
@@ -3600,6 +3681,46 @@ function AdminTab() {
     }
   }
 
+  // THÊM MỚI: admin XÓA VĨNH VIỄN tài khoản GV + toàn bộ lớp/học sinh/đề/bài
+  // nộp của GV đó (khác "Khoá": không thể mở lại). Bắt gõ lại đúng email để
+  // xác nhận; server cũng kiểm tra lại email này (xem DELETE
+  // /api/admin/teachers/[id]).
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  async function handleDeleteTeacher(t: TeacherAccountItem) {
+    setOpenMenuId(null);
+    const input = window.prompt(
+      `XÓA VĨNH VIỄN tài khoản "${t.name}" (${t.email})?\n\n` +
+        `Toàn bộ ${t.classCount} lớp, học sinh trong lớp, đề thi, bài nộp và ảnh bài làm của giáo viên này sẽ bị xóa và KHÔNG THỂ khôi phục. ` +
+        `Nếu chỉ muốn chặn đăng nhập, hãy chọn "Khoá tài khoản".\n\n` +
+        `Để xác nhận, nhập chính xác email của tài khoản:`
+    );
+    if (input === null) return; // bấm Hủy
+    if (input.trim().toLowerCase() !== t.email.trim().toLowerCase()) {
+      alert('Email nhập không khớp — chưa xóa gì cả.');
+      return;
+    }
+    setDeletingId(t._id);
+    try {
+      await apiFetch(`/api/admin/teachers/${t._id}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ confirmEmail: input.trim() }),
+      });
+      setTeachers((prev) => prev.filter((x) => x._id !== t._id));
+      if (expandedId === t._id) setExpandedId(null);
+      setDetailCache((prev) => {
+        const next = { ...prev };
+        delete next[t._id];
+        return next;
+      });
+      loadLogs();
+      loadStats();
+    } catch (err: any) {
+      alert(err.message || 'Không xóa được tài khoản này.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   // THÊM MỚI (thiết kế lại trang Quản trị): 2 thẻ tổng hợp nhanh cần chú ý
   // (sắp hết hạn / đã hết hạn) — tính từ stats đã tải, dùng cho banner nhắc
   // ở mục Tổng quan, giúp admin biết ngay cần vào tab "Tài khoản GV" xử lý.
@@ -3614,6 +3735,7 @@ function AdminTab() {
   const SECTIONS = [
     { key: 'overview' as const, label: 'Tổng quan', icon: <GaugeIcon className="w-4 h-4" /> },
     { key: 'teachers' as const, label: 'Tài khoản GV', icon: <UsersIcon className="w-4 h-4" />, count: teachers.length },
+    { key: 'students' as const, label: 'Tài khoản HS', icon: <UsersIcon className="w-4 h-4" /> },
     { key: 'settings' as const, label: 'Cấu hình', icon: <KeyIcon className="w-4 h-4" /> },
     { key: 'logs' as const, label: 'Nhật ký', icon: <ClockIcon className="w-4 h-4" />, count: logs.length },
     // THÊM MỚI (giai đoạn 3 — Kho đề chung giữa giáo viên): mục quản trị
@@ -3694,7 +3816,10 @@ function AdminTab() {
               {
                 label: 'HS đang thi',
                 value: stats?.liveExamCount,
-                sub: 'toàn hệ thống',
+                sub:
+                  stats && stats.liveClassCount !== undefined
+                    ? `${stats.liveClassCount} trong lớp · ${stats.liveFreeCount ?? 0} tự do`
+                    : 'toàn hệ thống',
                 icon: <CapIcon className="w-5 h-5 text-green-600" />,
               },
               { label: 'Tài khoản HS', value: stats?.studentAccountCount, icon: <CapIcon className="w-5 h-5 text-blue-600" /> },
@@ -3727,6 +3852,27 @@ function AdminTab() {
               </div>
             ))}
           </div>
+
+          {/* 25-10: thống kê HS đang thi theo đề (gồm cả thí sinh tự do). Không
+              realtime — số liệu tính lúc admin mở/làm mới Tổng quan. */}
+          {!statsLoading && stats?.liveByExam && stats.liveByExam.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl mt-3 overflow-hidden">
+              <p className="px-4 py-2.5 text-sm font-bold text-gray-900 border-b border-gray-100">
+                Đề đang có người làm (top {stats.liveByExam.length})
+              </p>
+              <ul className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                {stats.liveByExam.map((e) => (
+                  <li key={e.examId} className="px-4 py-2 flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate text-gray-800">{e.title}</span>
+                    <span className="shrink-0 text-xs text-gray-500">
+                      <b className="text-gray-900">{e.total}</b> em
+                      {e.free > 0 && <span className="text-gray-400"> ({e.free} tự do)</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* THÊM MỚI (đóng/duyệt đăng ký): banner nhắc khi có tài khoản
               đang chờ duyệt — đặt TRƯỚC banner sắp hết hạn vì mức độ khẩn
@@ -4000,6 +4146,15 @@ function AdminTab() {
                                         ? 'Từ chối tài khoản'
                                         : 'Khoá tài khoản'}
                                     </button>
+                                    {/* THÊM MỚI: xóa vĩnh viễn — đặt cuối menu,
+                                        màu đỏ đậm + gõ lại email mới xóa. */}
+                                    <button
+                                      onClick={() => handleDeleteTeacher(t)}
+                                      disabled={deletingId === t._id}
+                                      className="w-full text-left px-3.5 py-2.5 text-sm font-semibold border-t border-gray-100 text-red-700 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                                    >
+                                      {deletingId === t._id ? 'Đang xóa...' : 'Xóa tài khoản vĩnh viễn'}
+                                    </button>
                                   </div>
                                 )}
                               </div>
@@ -4150,6 +4305,10 @@ function AdminTab() {
           cấu trúc cây thư mục — tách hẳn ra file riêng LibraryAdminSection,
           chỉ render 1 dòng ở đây. */}
       {section === 'library' && <LibraryAdminSection />}
+
+      {/* Mục quản lý/xóa tài khoản học sinh không dùng — file riêng. Sau khi xóa
+          nạp lại thẻ thống kê (số tài khoản HS) cho khớp. */}
+      {section === 'students' && <AdminStudentAccountsSection onChanged={loadStats} />}
     </div>
   );
 }
@@ -4164,40 +4323,50 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
   // phẳng. Tự làm mới mỗi 20 giây (polling đơn giản, không cần WebSocket) để
   // GV không phải bấm F5 tay mới thấy cập nhật khi có em bắt đầu/nộp bài.
   const [liveStudents, setLiveStudents] = useState<LiveStudent[]>([]);
+  // SỬA (25-10): tổng số thật (có thể lớn hơn số dòng được tải về), cờ cắt bớt,
+  // ô tìm kiếm trong danh sách, và mốc "bây giờ" để tự ẩn dòng đã hết giờ làm bài.
+  const [liveTotal, setLiveTotal] = useState(0);
+  const [liveTruncated, setLiveTruncated] = useState(false);
+  const [liveQuery, setLiveQuery] = useState('');
+  const [liveNow, setLiveNow] = useState(() => Date.now());
   // SỬA (khiếu nại điện thoại): "Đang thi" gộp thành 1 dòng gọn, bấm mới xổ danh sách.
   const [liveOpen, setLiveOpen] = useState(false);
   const [liveError, setLiveError] = useState('');
 
+  // SỬA (25-10, "hiện danh sách dài ~1000 HS mà không có thanh trượt trông rất
+  // kì"): khi danh sách GẬP chỉ gọi API ?countOnly=1 (rất nhẹ) để lấy số hiện ở
+  // tiêu đề; chỉ khi GV bấm mở mới tải danh sách đầy đủ. Effect chạy lại mỗi lần
+  // mở/gập để lấy dữ liệu đúng chế độ ngay lập tức.
   useEffect(() => {
     let cancelled = false;
     async function loadLive() {
       // SỬA (giảm tải Active CPU trên Vercel khi có nhiều GV dùng cùng lúc):
-      // không gọi API khi tab đang ẩn (GV chuyển tab khác/thu nhỏ trình
-      // duyệt) — poll nền vô ích vì không ai nhìn thấy kết quả, mà mỗi lượt
-      // gọi vẫn tốn 1 lượt invoke + CPU xử lý ở server dù rất nhẹ. Xem thêm
-      // ClassDetailPanel.tsx (cùng kiểu sửa cho loadActivityStatus).
+      // không gọi API khi tab đang ẩn — poll nền vô ích vì không ai nhìn thấy
+      // kết quả. Xem thêm ClassDetailPanel.tsx (cùng kiểu sửa loadActivityStatus).
       if (document.hidden) return;
       try {
-        const data = await apiFetch<{ liveStudents: LiveStudent[] }>('/api/submissions/live');
+        const data = await apiFetch<{ liveStudents: LiveStudent[]; total?: number; truncated?: boolean }>(
+          liveOpen ? '/api/submissions/live' : '/api/submissions/live?countOnly=1'
+        );
         if (!cancelled) {
           setLiveStudents(data.liveStudents);
+          setLiveTotal(typeof data.total === 'number' ? data.total : data.liveStudents.length);
+          setLiveTruncated(!!data.truncated);
+          setLiveNow(Date.now());
           setLiveError('');
         }
       } catch {
-        // Giống thống kê lớp bên dưới — lỗi ở widget phụ này không cần chặn
-        // cả trang chủ, chỉ lặng lẽ giữ danh sách cũ (nếu có) tới lần thử lại
-        // kế tiếp.
+        // Lỗi ở widget phụ này không cần chặn cả trang chủ, chỉ lặng lẽ giữ
+        // danh sách cũ (nếu có) tới lần thử lại kế tiếp.
         if (!cancelled) setLiveError('Không tải được danh sách đang thi.');
       }
     }
     loadLive();
-    // SỬA: giãn 20s -> 45s (tình trạng "đang thi" không cần cập nhật sát
-    // giây, 45s vẫn đủ nhanh để GV thấy kịp thời) — giảm ~55% số lượt gọi
-    // nền so với trước, cộng thêm hiệu quả của việc dừng hẳn khi tab ẩn ở
-    // trên, tổng cộng giảm đáng kể Active CPU khi càng nhiều GV mở tab lâu.
+    // Tình trạng "đang thi" không cần cập nhật sát giây: 45s là đủ, và tab ẩn
+    // thì dừng hẳn để giảm Active CPU.
     const interval = setInterval(loadLive, 45000);
-    // Quay lại tab sau khi ẩn -> làm mới ngay 1 lần cho khớp dữ liệu mới
-    // nhất, thay vì phải chờ tới interval kế tiếp (có thể tới 45s).
+    // Tick 30s để tự ẩn dòng đã hết giờ làm bài (endAt) mà KHÔNG cần gọi lại API.
+    const tick = setInterval(() => setLiveNow(Date.now()), 30000);
     function handleVisibilityChange() {
       if (!document.hidden) loadLive();
     }
@@ -4205,9 +4374,19 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
     return () => {
       cancelled = true;
       clearInterval(interval);
+      clearInterval(tick);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [liveOpen]);
+
+  // Dòng đã quá giờ làm bài (endAt) bị ẩn ngay phía trình duyệt; số hiển thị trừ tương ứng.
+  const liveVisible = liveStudents.filter((s) => !s.endAt || s.endAt > liveNow);
+  const liveHiddenLocally = liveStudents.length - liveVisible.length;
+  const liveCount = Math.max(0, liveTotal - liveHiddenLocally);
+  const liveQ = liveQuery.trim().toLowerCase();
+  const liveFiltered = liveQ
+    ? liveVisible.filter((s) => `${s.studentName} ${s.className} ${s.examTitle}`.toLowerCase().includes(liveQ))
+    : liveVisible;
 
   useEffect(() => {
     let cancelled = false;
@@ -4227,6 +4406,10 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
 
   const totalStudents = classes.reduce((sum, c) => sum + c.studentCount, 0);
 
+  // Lời chào theo giờ máy của người dùng (thay bó hoa trang trí cũ).
+  const hour = new Date().getHours();
+  const greeting = hour < 11 ? 'Chào buổi sáng' : hour < 14 ? 'Chào buổi trưa' : hour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối';
+
   // "Lượt đã thi" cần API submissions (Bước 2/3, chưa làm) — tạm ẩn số liệu
   // này khỏi thẻ thống kê thay vì hiện số giả bằng 0 gây hiểu nhầm là "chưa
   // ai thi" trong khi thực ra tính năng giao đề còn chưa tồn tại.
@@ -4237,8 +4420,8 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
-      <h2 className="text-2xl font-bold text-gray-900 tracking-tight mb-1 inline-flex items-center gap-2">
-        Chào {teacher.name} <BouquetIcon className="w-6 h-6 text-blue-600" />
+      <h2 className="text-2xl font-bold text-gray-900 tracking-tight mb-1">
+        {greeting}, {teacher.name}
       </h2>
       <p className="text-sm text-gray-500 mb-7">Tổng quan nhanh — bấm vào 1 mục để đi tới tab tương ứng.</p>
 
@@ -4282,7 +4465,7 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
       {/* THÊM MỚI: danh sách "đang thi" — xem ghi chú ở khai báo state
           liveStudents phía trên. Chỉ hiện khối này khi có ít nhất 1 em đang
           thi, tránh chiếm chỗ trang chủ lúc không ai làm bài. */}
-      {liveStudents.length > 0 && (
+      {liveCount > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm mt-7 overflow-hidden">
           <button
             type="button"
@@ -4294,7 +4477,7 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
             </span>
-            <span className="flex-1 font-bold text-gray-900">Đang thi ({liveStudents.length})</span>
+            <span className="flex-1 font-bold text-gray-900">Đang thi ({liveCount})</span>
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -4306,27 +4489,52 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
             </svg>
           </button>
           {liveOpen && (
-            <ul className="divide-y divide-gray-100 px-4 pb-2 border-t border-gray-100">
-              {liveStudents.map((s) => (
-                <li key={`${s.studentId}-${s.examId}`} className="py-2 flex items-center justify-between gap-3 text-sm">
-                  <div className="min-w-0">
-                    <p className="font-medium text-gray-800 truncate">{s.studentName}</p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {s.className} · {s.examTitle}
-                    </p>
-                  </div>
-                  {s.started_at && (
-                    <p className="text-xs text-gray-400 shrink-0">
-                      Bắt đầu: {new Date(s.started_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <div className="border-t border-gray-100">
+              {liveVisible.length > 8 && (
+                <div className="px-4 pt-3">
+                  <input
+                    type="search"
+                    value={liveQuery}
+                    onChange={(e) => setLiveQuery(e.target.value)}
+                    placeholder="Tìm theo tên, lớp hoặc đề…"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-base outline-none focus:border-blue-400"
+                  />
+                </div>
+              )}
+              {/* Khung CUỘN cố định chiều cao (~320px): danh sách vài trăm/1000 em
+                  không còn kéo dài cả trang chủ, chỉ cuộn bên trong khung này. */}
+              <ul className="divide-y divide-gray-100 px-4 pb-2 mt-1 max-h-80 overflow-y-auto overscroll-contain thin-scroll">
+                {liveFiltered.length === 0 && (
+                  <li className="py-3 text-sm text-gray-400">
+                    {liveStudents.length === 0 ? 'Đang tải danh sách…' : 'Không có kết quả khớp.'}
+                  </li>
+                )}
+                {liveFiltered.map((s) => (
+                  <li key={`${s.studentId}-${s.examId}`} className="py-2 flex items-center justify-between gap-3 text-sm">
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-800 truncate">{s.studentName}</p>
+                      <p className="text-xs text-gray-400 truncate">
+                        {s.className} · {s.examTitle}
+                      </p>
+                    </div>
+                    {s.started_at && (
+                      <p className="text-xs text-gray-400 shrink-0">
+                        Bắt đầu: {new Date(s.started_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {liveTruncated && (
+                <p className="px-4 pb-3 text-xs text-gray-400">
+                  Chỉ hiện {liveStudents.length} em gần nhất trong tổng {liveTotal} — dùng ô tìm kiếm để lọc.
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
-      {liveError && liveStudents.length === 0 && (
+      {liveError && liveCount === 0 && (
         <p className="text-xs text-red-500 mt-7">{liveError}</p>
       )}
 
@@ -4339,6 +4547,35 @@ function HomeTab({ onGoTo, teacher }: { onGoTo: (tab: MainTab) => void; teacher:
 function AccountMenu({ teacher, onLogout }: { teacher: CurrentTeacher; onLogout: () => void }) {
   const [open, setOpen] = useState(false);
   const [loggingOutEverywhere, setLoggingOutEverywhere] = useState(false);
+  // THÊM MỚI (25-10): xóa vĩnh viễn tài khoản — popup xác nhận bằng mật khẩu.
+  const [showDelete, setShowDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const isAdminAccount = isAdminEmail(teacher.email);
+
+  async function handleDeleteAccount() {
+    if (!deletePassword || deleting) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      const res = await fetch('/api/auth/delete-account', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: deletePassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error || 'Không xóa được tài khoản, vui lòng thử lại.');
+        return;
+      }
+      window.location.href = '/login';
+    } catch {
+      setDeleteError('Không xóa được tài khoản, vui lòng thử lại.');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // THÊM MỚI (phương án dự phòng khi tài khoản bị chiếm): huỷ NGAY mọi
   // phiên đăng nhập khác của chính tài khoản này (kể cả 1 phiên bị đánh cắp
@@ -4400,6 +4637,71 @@ function AccountMenu({ teacher, onLogout }: { teacher: CurrentTeacher; onLogout:
           >
             {loggingOutEverywhere ? 'Đang xử lý...' : 'Đăng xuất tất cả thiết bị'}
           </button>
+          {!isAdminAccount && (
+            <button
+              onClick={() => {
+                setOpen(false);
+                setDeletePassword('');
+                setDeleteError('');
+                setShowDelete(true);
+              }}
+              className="w-full text-left px-3.5 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 border-t border-gray-100 transition-colors"
+            >
+              Xóa vĩnh viễn tài khoản
+            </button>
+          )}
+        </div>
+      )}
+
+      {showDelete && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4"
+          onClick={() => !deleting && setShowDelete(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-md p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-red-600 mb-2">Xóa vĩnh viễn tài khoản</h3>
+            <p className="text-sm text-gray-700 mb-2">
+              Toàn bộ dữ liệu của <span className="font-semibold">{teacher.email}</span> sẽ bị xóa
+              và <span className="font-semibold">không thể khôi phục</span>:
+            </p>
+            <ul className="text-sm text-gray-700 list-disc pl-5 mb-3 space-y-0.5">
+              <li>Tất cả đề thi (kể cả đề đang chia sẻ trong kho chung)</li>
+              <li>Lớp, học sinh, khối, các lượt giao đề và link thi</li>
+              <li>Toàn bộ bài làm, điểm, ảnh bài tự luận và ghi chú chấm</li>
+            </ul>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
+              Nhập mật khẩu để xác nhận
+            </label>
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              autoComplete="current-password"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-2"
+            />
+            {deleteError && <p className="text-sm text-red-600 mb-2">{deleteError}</p>}
+            <div className="flex justify-end gap-2 mt-2">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setShowDelete(false)}
+                className="text-sm font-semibold text-gray-600 hover:text-gray-800 py-2 px-4"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={!deletePassword || deleting}
+                onClick={handleDeleteAccount}
+                className="bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-semibold text-sm py-2 px-4 rounded-lg transition"
+              >
+                {deleting ? 'Đang xóa...' : 'Xóa vĩnh viễn'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -4474,39 +4776,6 @@ export default function Page() {
     }
   }, []);
 
-  // SỬA (khiếu nại: "dùng điện thoại ở chế độ NGANG thì icon 📱 mô phỏng
-  // điện thoại vẫn hiện ra, vô lý — icon đó chỉ nên hiện trên máy tính"):
-  // TRƯỚC ĐÂY icon này ẩn/hiện chỉ dựa vào ĐỘ RỘNG màn hình (class Tailwind
-  // `hidden sm:flex`, breakpoint 640px) — nhưng điện thoại xoay ngang cũng
-  // thường rộng hơn 640px (vd 800-900px), nên bị tính nhầm là "màn hình
-  // rộng kiểu máy tính" dù vẫn đang cầm điện thoại thật. Đổi sang phát hiện
-  // đúng LOẠI THIẾT BỊ (có chuột con trỏ mảnh + có hover hay không) bằng
-  // matchMedia('(pointer: fine) and (hover: hover)') — chuột máy tính mới
-  // thoả cả 2 điều kiện này; điện thoại/tablet cảm ứng (dù xoay ngang hay
-  // dọc, dù màn hình rộng bao nhiêu) luôn có pointer thô (coarse) nên không
-  // bao giờ thoả, icon sẽ không hiện. Mặc định false (ẩn) tới khi xác định
-  // xong, để tránh nháy hiện icon 1 khắc trên điện thoại trước khi kịp ẩn.
-  const [isDesktopPointer, setIsDesktopPointer] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(pointer: fine) and (hover: hover)');
-    // SỬA (kiểm tra lại khiếu nại "icon điện thoại vẫn lỡ hiện trên điện
-    // thoại"): thêm lớp chặn thứ 2 — kiểm tra thẳng khả năng CHẠM
-    // ('ontouchstart' in window hoặc navigator.maxTouchPoints > 0). Một số
-    // điện thoại/trình duyệt di động (đặc biệt vài bản Android WebView cũ)
-    // báo sai `(pointer: fine)` hoặc `(hover: hover)`, nhưng KHÔNG có thiết
-    // bị nào vừa cảm ứng vừa được coi là "máy tính thật" cho mục đích icon
-    // này — nên hễ phát hiện có khả năng chạm là ẩn icon ngay, bất kể kết
-    // quả matchMedia thế nào.
-    const hasTouch =
-      typeof window !== 'undefined' &&
-      ('ontouchstart' in window || (navigator?.maxTouchPoints || 0) > 0);
-    const evaluate = (pointerFine: boolean) => setIsDesktopPointer(pointerFine && !hasTouch);
-    evaluate(mq.matches);
-    const handler = (e: MediaQueryListEvent) => evaluate(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
 
   // SỬA (khiếu nại: "cột trái Xem đề chật quá khi xoay ngang điện thoại"):
   // cột trái CỐ ĐỊNH (<aside> điều hướng chính) đang ẩn/hiện chỉ dựa vào
@@ -4514,7 +4783,7 @@ export default function Page() {
   // chiều rộng > 640px (vd 800-900px) nên cột trái bị hiện nhầm, chiếm mất
   // ~240px trong màn hình vốn đã thấp, làm nội dung "Xem đề" (cần rộng để
   // hiện công thức/hình TikZ) bị bóp chật lại.
-  // Không dùng isDesktopPointer (pointer:fine) ở trên cho việc này vì nó
+  // Không dùng pointer:fine cho việc này vì nó
   // sẽ ẩn cột trái luôn cả với TABLET cảm ứng (iPad...) — vốn vẫn muốn giữ
   // cột trái khi đủ rộng (đúng ý định gốc "sm trở lên = máy tính/tablet").
   // Thay vào đó dùng CHIỀU CAO viewport: điện thoại xoay ngang luôn có
@@ -4734,40 +5003,16 @@ export default function Page() {
           /thi/[examId] theo đúng phạm vi đã chốt. */}
       <AiHelpWidget />
 
-      {/* SỬA (khiếu nại: bỏ dòng link "Xem thử trên điện thoại" khỏi cuối
-          cột trái) — link này giờ chuyển thành 1 icon nổi ở góc trên-phải
-          màn hình lớn, xem khối "Icon xem thử điện thoại" ngay dưới return
-          JSX chính bên dưới. */}
       <AccountMenu teacher={teacher} onLogout={handleLogout} />
     </>
   );
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* SỬA (khiếu nại: bỏ link "Xem thử trên điện thoại" ở cuối cột trái,
-          thay bằng 1 icon nổi góc trên-phải, to hơn, không nhãn chữ) — chỉ
-          hiện khi phát hiện ĐÚNG máy tính có chuột thật (isDesktopPointer),
-          không chỉ dựa độ rộng màn hình nữa (điện thoại xoay ngang cũng có
-          thể rộng hơn breakpoint sm nhưng vẫn là điện thoại, không phải máy
-          tính — icon "xem thử điện thoại" ở đó vô nghĩa vì đang cầm sẵn
-          điện thoại thật rồi). */}
-      {isDesktopPointer && (
-        <a
-          href="/phone-simulator.html"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Xem thử trên điện thoại"
-          title="Xem thử trên điện thoại"
-          className="fixed top-4 right-4 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-white border border-gray-200 shadow-md text-2xl text-gray-600 hover:text-blue-600 hover:border-blue-300 hover:shadow-lg transition"
-        >
-          📱
-        </a>
-      )}
 
       {/* Cột trái CỐ ĐỊNH — chỉ hiện từ breakpoint sm (≈640px) trở lên, tức
           máy tính/tablet. Ở màn hình hẹp hơn (điện thoại) ẩn hẳn, thay bằng
-          thanh trên cùng + drawer bên dưới. Muốn xem thử layout điện thoại
-          ngay trên laptop, dùng icon 📱 nổi ở góc trên-phải màn hình.
+          thanh trên cùng + drawer bên dưới.
           SỬA: thêm điều kiện isPhoneLandscape — điện thoại xoay ngang vẫn
           ẩn cột này dù chiều rộng đã vượt breakpoint sm (xem giải thích ở
           chỗ khai báo state). */}
@@ -4791,7 +5036,7 @@ export default function Page() {
             type="button"
             onClick={() => setNavOpen(true)}
             aria-label="Mở menu điều hướng"
-            className="text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+            className="text-gray-700 w-11 h-11 -mr-2 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
           >
             <HamburgerIcon className="w-6 h-6" />
           </button>
@@ -4810,7 +5055,7 @@ export default function Page() {
                   type="button"
                   onClick={() => setNavOpen(false)}
                   aria-label="Đóng menu"
-                  className="text-gray-400 hover:text-gray-600 px-2"
+                  className="text-gray-400 hover:text-gray-600 w-11 h-11 -mr-2 flex items-center justify-center"
                 >
                   <CloseIcon className="w-5 h-5" />
                 </button>

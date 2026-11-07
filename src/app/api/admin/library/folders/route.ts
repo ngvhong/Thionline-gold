@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/mongodb';
 import { LibraryFolder } from '@/lib/libraryFolderModel';
+import { ensureKnttTreeOnce } from '@/lib/seedKnttTree';
 import { requireAdmin } from '@/lib/adminGuard';
 
 // THÊM MỚI (Giai đoạn 3 — Kho đề chung giữa giáo viên): CRUD cây thư mục,
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
     }
 
     await connectToDatabase();
+    await ensureKnttTreeOnce(); // tự tạo cây Toán KNTT lần đầu mở
     const folders = await LibraryFolder.find().sort({ parentId: 1, order: 1, name: 1 }).lean();
     return NextResponse.json({ folders }, { status: 200 });
   } catch (err) {

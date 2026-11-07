@@ -1,3 +1,6 @@
+import { pickRepresentativeAttempt, resolveScoreMode } from '@/lib/scoreMode';
+import { resolveEffectiveSettings } from '@/lib/examAccessRules';
+import { ExamAssignmentModel } from '@/lib/examAssignmentModel';
 import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/mongodb';
@@ -62,8 +65,31 @@ export async function GET(request: NextRequest) {
       ]);
 
       const examIds = latestPerExam.map((s: any) => s.examId);
-      const exams = await Exam.find({ _id: { $in: examIds } }, { title: 1 }).lean();
+      const exams = await Exam.find({ _id: { $in: examIds } }, { title: 1, settings: 1 }).lean();
       const titleMap = new Map(exams.map((e: any) => [String(e._id), e.title]));
+      // Điểm hiển thị theo Cách tính điểm của đề (mặc định CAO NHẤT trong các lần
+      // đã nộp); trạng thái/attemptNumber vẫn theo lần mới nhất.
+      const assignRows = await ExamAssignmentModel.find({ classId: (student as any).classId, examId: { $in: examIds } }).lean();
+      const assignByExam = new Map(assignRows.map((a: any) => [String(a.examId), a]));
+      const modeMap = new Map(
+        exams.map((e: any) => [String(e._id), resolveScoreMode(resolveEffectiveSettings(e.settings, assignByExam.get(String(e._id)) as any))])
+      );
+      const submittedAll = await SubmissionModel.find(
+        { studentId: new mongoose.Types.ObjectId(studentId), status: 'đã nộp' },
+        { examId: 1, status: 1, attemptNumber: 1, score: 1, total: 1, scorePoints: 1, maxScorePoints: 1, essayGraded: 1, essayScores: 1, submitted_at: 1 }
+      ).lean();
+      const submittedByExam = new Map<string, any[]>();
+      submittedAll.forEach((a: any) => {
+        const k = String(a.examId);
+        const arr = submittedByExam.get(k) || [];
+        arr.push(a);
+        submittedByExam.set(k, arr);
+      });
+      const bestFor = (s: any) => {
+        const arr = submittedByExam.get(String(s.examId));
+        if (s.status !== 'đã nộp' || !arr || arr.length === 0) return s;
+        return pickRepresentativeAttempt(arr, modeMap.get(String(s.examId)) || 'highest');
+      };
 
       return NextResponse.json(
         {
@@ -72,13 +98,13 @@ export async function GET(request: NextRequest) {
             examId: String(s.examId),
             examTitle: titleMap.get(String(s.examId)) || '(Đề đã bị xóa)',
             status: s.status,
-            score: s.score ?? null,
-            total: s.total ?? null,
-            scorePoints: s.scorePoints ?? null,
-            maxScorePoints: s.maxScorePoints ?? null,
+            score: bestFor(s).score ?? null,
+            total: bestFor(s).total ?? null,
+            scorePoints: bestFor(s).scorePoints ?? null,
+            maxScorePoints: bestFor(s).maxScorePoints ?? null,
             attemptNumber: s.attemptNumber,
             assigned_at: s.assigned_at,
-            submitted_at: s.submitted_at || null,
+            submitted_at: bestFor(s).submitted_at || s.submitted_at || null,
           })),
         },
         { status: 200 }
@@ -169,6 +195,17 @@ export async function GET(request: NextRequest) {
           assignments: latestPerStudent.map((s: any) => ({
             studentId: String(s.studentId),
             status: s.status,
+            // THÊM MỚI: id lần làm mới nhất — dùng cho nút "Chấm em tiếp theo"
+            // (mở thẳng bài của em kế tiếp, không phải bấm qua trang học sinh).
+            submissionId: String(s._id),
+            // THÊM MỚI: trạng thái chấm Phần IV (tự luận) của lần làm mới nhất,
+            // chỉ có khi em đã nộp ảnh bài tự luận: 'cần chấm' | 'đã chấm'.
+            essay:
+              s.status === 'đã nộp' && s.essayImages && Object.keys(s.essayImages).length > 0
+                ? s.essayGraded
+                  ? 'đã chấm'
+                  : 'cần chấm'
+                : undefined,
           })),
         },
         { status: 200 }

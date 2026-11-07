@@ -47,6 +47,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (typeof body.openForStudents === 'boolean') {
       update.openForStudents = body.openForStudents;
     }
+    if (typeof body.openForMockExam === 'boolean') {
+      update.openForMockExam = body.openForMockExam;
+    }
 
     if ('sharedFolderId' in body) {
       if (body.sharedFolderId === null) {
@@ -67,7 +70,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     // lẫn body lần này đều null) là vô nghĩa — đề bật cờ chia sẻ nhưng
     // không gắn vào đâu sẽ không hiện ở bất kỳ nhánh nào trong /kho-de-chung.
     const willShareTeachers = update.shareWithTeachers ?? existing.shareWithTeachers;
-    const willShareStudents = update.openForStudents ?? existing.openForStudents;
+    const willShareStudents =
+      (update.openForStudents ?? existing.openForStudents) || (update.openForMockExam ?? existing.openForMockExam);
     const willHaveFolder = 'sharedFolderId' in update ? update.sharedFolderId : existing.sharedFolderId;
     if ((willShareTeachers || willShareStudents) && !willHaveFolder) {
       return NextResponse.json({ error: 'Hãy chọn 1 nhánh thư mục trước khi bật chia sẻ.' }, { status: 400 });

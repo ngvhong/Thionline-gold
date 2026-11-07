@@ -56,7 +56,11 @@ export default function ShareToLibraryModal({
   const [selectedFolderId, setSelectedFolderId] = useState<string>('');
   const [shareWithTeachers, setShareWithTeachers] = useState(false);
   const [openForStudents, setOpenForStudents] = useState(false);
+  const [openForMockExam, setOpenForMockExam] = useState(false);
   const [isPublished, setIsPublished] = useState(false);
+  // THÊM MỚI (25-10): đề đang được chia sẻ (đã gắn nhánh / bật 1 trong 2 cờ) lúc
+  // mở popup -> hiện nút đỏ "Xóa chia sẻ" để gỡ đề khỏi nhánh (vd. gk1).
+  const [wasShared, setWasShared] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -72,7 +76,9 @@ export default function ShareToLibraryModal({
         setSelectedFolderId(exam.sharedFolderId || '');
         setShareWithTeachers(!!exam.shareWithTeachers);
         setOpenForStudents(!!exam.openForStudents);
+        setOpenForMockExam(!!exam.openForMockExam);
         setIsPublished(!!exam.is_published);
+        setWasShared(!!(exam.sharedFolderId || exam.shareWithTeachers || exam.openForStudents || exam.openForMockExam));
       } catch (err: any) {
         setError(err.message || 'Không tải được dữ liệu chia sẻ.');
       } finally {
@@ -89,7 +95,7 @@ export default function ShareToLibraryModal({
   }, [folders, search]);
 
   async function handleSave() {
-    if ((shareWithTeachers || openForStudents) && !selectedFolderId) {
+    if ((shareWithTeachers || openForStudents || openForMockExam) && !selectedFolderId) {
       alert('Hãy chọn 1 nhánh thư mục trước khi bật chia sẻ.');
       return;
     }
@@ -101,12 +107,34 @@ export default function ShareToLibraryModal({
           sharedFolderId: selectedFolderId || null,
           shareWithTeachers,
           openForStudents,
+          openForMockExam,
         }),
       });
       alert('✅ Đã cập nhật trạng thái chia sẻ.');
       onClose();
     } catch (err: any) {
       alert(err.message || 'Không cập nhật được trạng thái chia sẻ.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // THÊM MỚI (25-10): gỡ hẳn đề khỏi kho chung — bỏ nhánh + tắt cả 2 cờ. Chỉ gỡ
+  // CHIA SẺ, KHÔNG xóa đề của GV (đề vẫn còn nguyên trong danh sách của bạn);
+  // đề biến mất khỏi nhánh (vd. gk1) trong /kho-de-chung và tab Ôn luyện. Bản
+  // GV khác đã "lấy về" trước đó là bản sao riêng nên không bị ảnh hưởng.
+  async function handleUnshare() {
+    if (!confirm('Xóa chia sẻ đề này?\n\nĐề sẽ biến mất khỏi kho đề chung (và khỏi Ôn luyện, Thi thử của học sinh). Đề của bạn vẫn còn nguyên.')) return;
+    setSaving(true);
+    try {
+      await apiFetch(`/api/exams/${examId}/share`, {
+        method: 'PATCH',
+        body: JSON.stringify({ sharedFolderId: null, shareWithTeachers: false, openForStudents: false, openForMockExam: false }),
+      });
+      alert('✅ Đã xóa chia sẻ — đề không còn trong kho chung.');
+      onClose();
+    } catch (err: any) {
+      alert(err.message || 'Không xóa được chia sẻ.');
     } finally {
       setSaving(false);
     }
@@ -179,7 +207,7 @@ export default function ShareToLibraryModal({
               </span>
             </label>
 
-            <label className="flex items-start gap-2 mb-4 cursor-pointer">
+            <label className="flex items-start gap-2 mb-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={openForStudents}
@@ -188,12 +216,36 @@ export default function ShareToLibraryModal({
                 className="mt-0.5"
               />
               <span className="text-sm text-gray-700">
-                Mở cho học sinh tự luyện tập (tính năng &quot;Ôn luyện&quot; — sắp ra mắt, bật sẵn ở đây để không phải
-                quay lại chỉnh sau).
+                Mở cho học sinh <span className="font-semibold">Ôn luyện</span> — làm tự do theo bài/chủ đề, chấm ngay từng
+                câu, bấm ổ khóa để xem lời giải, có điểm và lưu tiến độ.
               </span>
             </label>
 
-            <div className="flex justify-end gap-2">
+            <label className="flex items-start gap-2 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={openForMockExam}
+                onChange={(e) => setOpenForMockExam(e.target.checked)}
+                disabled={!isPublished}
+                className="mt-0.5"
+              />
+              <span className="text-sm text-gray-700">
+                Mở cho học sinh <span className="font-semibold">Thi thử</span> — làm như thi thật: bấm giờ, nộp bài một lần,
+                có điểm. Có thể bật cả hai chế độ, hoặc chỉ một.
+              </span>
+            </label>
+
+            <div className="flex items-center justify-end gap-2">
+              {wasShared && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleUnshare}
+                  className="mr-auto text-sm font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 border border-red-200 rounded-lg py-2 px-3 transition"
+                >
+                  Xóa chia sẻ
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}

@@ -22,6 +22,27 @@ export interface ParsedQuestion {
   label: 'Câu' | 'Bài';
 }
 
+// THÊM MỚI (khiếu nại: "app báo lỗi vì dư lệnh \begin{figure}[h]"): trong mã
+// .tex gốc, hình TikZ rất hay được bọc trong môi trường nổi
+// \begin{figure}[h] ... \end{figure} (kèm \centering, \caption{}). Trên web
+// các lệnh này KHÔNG có ý nghĩa gì (chỉ dùng để canh vị trí khi in PDF) nhưng
+// parser trước đây không biết chúng -> hoặc in thô ra màn hình, hoặc làm lệch
+// việc gán hình vào câu hỏi. Bóc vỏ: bỏ \begin{figure}[..]/\end{figure}
+// (cũng như figure*, wrapfigure), bỏ \caption{} rỗng, còn \caption{nội dung}
+// thì giữ lại phần nội dung; GIỮ NGUYÊN mọi thứ bên trong (hình, chữ).
+// Hàm idempotent: gọi nhiều lần không gây hại.
+function stripFigureWrappers(text: string): string {
+  if (!text || text.indexOf('figure') === -1 && text.indexOf('\\caption') === -1) return text;
+  return text
+    // \begin{figure}[h] / \begin{figure*}[htbp] / \begin{wrapfigure}{r}{5cm}
+    .replace(/\\begin\{figure\*?\}(\s*\[[^\]]*\])?/g, '')
+    .replace(/\\begin\{wrapfigure\}(\s*\[[^\]]*\])?\s*\{[^{}]*\}\s*(\[[^\]]*\])?\s*\{[^{}]*\}/g, '')
+    .replace(/\\end\{(?:figure\*?|wrapfigure)\}/g, '')
+    // \caption{} rỗng -> bỏ; \caption{Hình 1} -> giữ chữ "Hình 1"
+    .replace(/\\caption\*?(\s*\[[^\]]*\])?\s*\{\s*\}/g, '')
+    .replace(/\\caption\*?(\s*\[[^\]]*\])?\s*\{([^{}]*)\}/g, '$2');
+}
+
 export function parseLatexToJSON(texString: string) {
   // CHUẨN HOÁ XUỐNG DÒNG: file .tex gốc có thể dùng CRLF (\r\n) hoặc lẫn cả
   // \r trơ trọi. Mọi bước xử lý xuống dòng/dòng trống phía dưới (cleanTextFormatting,
@@ -31,6 +52,11 @@ export function parseLatexToJSON(texString: string) {
   // thừa (đặc biệt rõ ngay sát hình vẽ TikZ). Chuẩn hoá NGAY ĐẦU HÀM, trước
   // mọi bước xử lý khác, để áp dụng nhất quán cho toàn bộ văn bản.
   texString = texString.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Bóc vỏ \begin{figure}[h]...\end{figure} NGAY TRƯỚC khi trích hình TikZ, để
+  // lệnh thừa không làm lệch vị trí hình / không rớt ra màn hình (xem hàm
+  // stripFigureWrappers ở trên).
+  texString = stripFigureWrappers(texString);
 
   // SỬA LỖI TIKZ-TRONG-TIKZ: trước đây dùng regex non-greedy
   // /\begin{tikzpicture}[\s\S]*?\end{tikzpicture}/, nên khi có một
@@ -172,6 +198,26 @@ function findShortAnsCommand(text: string): { index: number; length: number } | 
   const m = re.exec(text);
   if (!m) return null;
   return { index: m.index, length: m[0].length };
+}
+
+// Gỡ các lớp "vỏ" thừa quanh placeholder hình TikZ sau khi \immini/\minipage đã
+// được bóc: nhóm ngoặc trần "{ [[HÌNH_TIKZ_n]] }" (tác giả hay bọc thêm 1 cặp
+// {} quanh hình trong tham số thứ 2 của \immini) và các lệnh co/giãn hình
+// \resizebox{..}{..}{..}, \scalebox{..}{..}, \adjustbox{..}{..} (KaTeX không
+// biết chúng nên in thô cả "{" "}" ra màn hình).
+function unwrapTikzPlaceholderWrappers(text: string): string {
+  const ph = '(\\[\\[HÌNH_TIKZ_\\d+\\]\\])';
+  let out = text;
+  for (let k = 0; k < 4; k++) {
+    const before = out;
+    out = out
+      .replace(new RegExp('\\\\resizebox\\*?\\s*\\{[^{}]*\\}\\s*\\{[^{}]*\\}\\s*\\{\\s*' + ph + '\\s*\\}', 'g'), '$1')
+      .replace(new RegExp('\\\\scalebox\\s*\\{[^{}]*\\}\\s*(?:\\[[^\\]]*\\])?\\s*\\{\\s*' + ph + '\\s*\\}', 'g'), '$1')
+      .replace(new RegExp('\\\\adjustbox\\s*\\{[^{}]*\\}\\s*\\{\\s*' + ph + '\\s*\\}', 'g'), '$1')
+      .replace(new RegExp('(^|[^\\\\A-Za-z0-9}\\]])\\{\\s*' + ph + '\\s*\\}', 'g'), '$1$2');
+    if (out === before) break;
+  }
+  return out;
 }
 
 function cleanTextFormatting(text: string): string {
@@ -440,6 +486,8 @@ function cleanTextFormatting(text: string): string {
   result = result.replace(/\\begin\{align\*\}([\s\S]*?)\\end\{align\*\}/g,
     (_m, body) => `$$\\begin{align*}${collapseDoubleAmpAroundRelation(stripTrailingRowBreak(fixMissingRowBreaks(body).replace(/\$/g, '')))}\\end{align*}$$`);
   result = result.replace(/\\begin\{center\}/g, '').replace(/\\end\{center\}/g, '');
+  // Cùng lý do với \begin{center}: \begin{figure}[h] cũng chỉ là vỏ canh vị trí khi in PDF.
+  result = stripFigureWrappers(result);
 
   // \begin{multicols}{2}...\end{multicols} chỉ là gợi ý CHIA CỘT khi in ấn
   // (LaTeX), không có ý nghĩa gì trên web -> bỏ thẻ, giữ nguyên nội dung bên
@@ -1061,8 +1109,8 @@ function cleanTextFormatting(text: string): string {
     // bắt đầu bằng "it"/"bf" liền chữ, ví dụ "{\bfseries ...}" (sau "\bf" là
     // chữ "s", không phải khoảng trắng cũng không phải "{", nên vẫn KHÔNG
     // khớp, giữ an toàn như regex cũ).
-    .replace(/\{\s*\\it(?:\s+|(?=\{))\s*\{?\s*([^{}]*)\s*\}?\s*\}/g, '$\\textit{$1}$')
-    .replace(/\{\s*\\bf(?:\s+|(?=\{))\s*\{?\s*([^{}]*)\s*\}?\s*\}/g, '$\\textbf{$1}$')
+    .replace(/\{\s*\\it(?![A-Za-z])\s*\{?\s*([^{}]*)\s*\}?\s*\}/g, '$\\textit{$1}$')
+    .replace(/\{\s*\\bf(?![A-Za-z])\s*\{?\s*([^{}]*)\s*\}?\s*\}/g, '$\\textbf{$1}$')
     // SỬA (khiếu nại: "chữ in nghiêng vẫn tự xuống dòng riêng dù dòng trên
     // còn trống, kể cả để ngang điện thoại"): nguồn LaTeX gốc thường có 1 dấu
     // "\\" (đã đổi thành "\n" ở dòng .replace phía trên) ngay TRƯỚC nhãn in
@@ -1245,6 +1293,7 @@ function cleanTextFormatting(text: string): string {
     .replace(/\\vspace\*?\{[^}]*\}/g, '')
     .replace(/\\hspace\*?\{[^}]*\}/g, '');
 
+  result = unwrapTikzPlaceholderWrappers(result);
   return result.trim();
 }
 
@@ -1836,6 +1885,128 @@ function parseAllQuestions(fullText: string): ParsedQuestion[] {
   });
 }
 
+
+// THÊM MỚI (6-11, khiếu nại: "người soạn thêm lệnh gọi thư viện phía trên hình
+// TikZ, app chỉ rút khối tikzpicture nên các lệnh đó bị bỏ lại trong đề, ảnh
+// hưởng bài làm"): trong mã .tex gốc, phía trên \begin{tikzpicture} tác giả hay
+// viết thêm \usetikzlibrary{..}, \usepgfplotslibrary{..}, \usepackage{..},
+// \tikzset{..}, \tikzstyle{..}=[..], \pgfplotsset{..}, \definecolor/\colorlet.
+// extractTikzBlocks chỉ lấy khối tikzpicture nên các lệnh này rớt ra thành chữ
+// thô trong đề. Xử lý:
+//   - \usetikzlibrary / \usepgfplotslibrary / \usepackage / \pgfplotsset{compat..}:
+//     XOÁ khỏi đề (khung biên dịch ở ExamBuilder.buildTikzTemplate đã nạp sẵn
+//     gói/thư viện phổ biến).
+//   - \tikzset / \tikzstyle / \pgfplotsset / \definecolor / \colorlet: XOÁ khỏi
+//     đề nhưng GẮN vào ngay đầu thân các khối tikzpicture đứng SAU nó (trong
+//     cùng câu, hoặc khai báo chung trước câu đầu tiên) để hình vẫn biên dịch
+//     đúng style/màu tác giả đã khai báo.
+// Chỉ xử lý lệnh NẰM NGOÀI tikzpicture.
+function findBalancedEnd(text: string, openIdx: number, open: string, close: string): number {
+  if (text[openIdx] !== open) return -1;
+  let depth = 0;
+  for (let k = openIdx; k < text.length; k++) {
+    const ch = text[k];
+    if (ch === '\\') { k++; continue; }
+    if (ch === open) depth++;
+    else if (ch === close) { depth--; if (depth === 0) return k + 1; }
+  }
+  return -1;
+}
+
+function skipSpaces(text: string, idx: number): number {
+  while (idx < text.length && /\s/.test(text[idx])) idx++;
+  return idx;
+}
+
+// Đọc nhóm tham số bắt đầu tại idx (sau khoảng trắng): [...] hoặc {...}.
+function readArg(text: string, idx: number, open: '[' | '{'): number {
+  const at = skipSpaces(text, idx);
+  if (text[at] !== open) return -1;
+  return findBalancedEnd(text, at, open, open === '[' ? ']' : '}');
+}
+
+type SetupKind = 'drop' | 'keep';
+
+// Tìm lệnh cấu hình TikZ đầu tiên trong text; trả về vị trí + độ dài + loại.
+function findNextTikzSetup(text: string): { start: number; end: number; kind: SetupKind } | null {
+  const re = /\\(usetikzlibrary|usepgfplotslibrary|usepackage|pgfplotsset|tikzset|tikzstyle|definecolor|colorlet)(?![a-zA-Z])/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const name = m[1];
+    const start = m.index;
+    let end = -1;
+    let kind: SetupKind = 'keep';
+    if (name === 'usetikzlibrary' || name === 'usepgfplotslibrary') {
+      end = readArg(text, re.lastIndex, '{');
+      kind = 'drop';
+    } else if (name === 'usepackage') {
+      let at = re.lastIndex;
+      const opt = readArg(text, at, '[');
+      if (opt !== -1) at = opt;
+      end = readArg(text, at, '{');
+      kind = 'drop';
+    } else if (name === 'tikzstyle') {
+      // \tikzstyle{name}=[...]  (có thể có khoảng trắng quanh dấu =)
+      const nameEnd = readArg(text, re.lastIndex, '{');
+      if (nameEnd !== -1) {
+        let at = skipSpaces(text, nameEnd);
+        if (text[at] === '=') {
+          at = skipSpaces(text, at + 1);
+          end = text[at] === '[' ? findBalancedEnd(text, at, '[', ']') : -1;
+        }
+      }
+    } else if (name === 'definecolor') {
+      let at = re.lastIndex;
+      for (let n = 0; n < 3 && at !== -1; n++) at = readArg(text, at, '{');
+      end = at;
+    } else if (name === 'colorlet') {
+      let at = re.lastIndex;
+      const opt = readArg(text, at, '[');
+      if (opt !== -1) at = opt;
+      for (let n = 0; n < 2 && at !== -1; n++) at = readArg(text, at, '{');
+      end = at;
+    } else {
+      // tikzset / pgfplotsset: 1 nhóm {...}
+      end = readArg(text, re.lastIndex, '{');
+      if (name === 'pgfplotsset' && end !== -1) {
+        const body = text.slice(skipSpaces(text, re.lastIndex) + 1, end - 1).trim();
+        if (/^compat\s*=/.test(body)) kind = 'drop';
+      }
+    }
+    if (end !== -1) return { start, end, kind };
+    // Không đọc được tham số (lệnh dở dang) -> bỏ qua lần khớp này, tìm tiếp.
+  }
+  return null;
+}
+
+// Xoá mọi lệnh cấu hình TikZ trong 1 đoạn văn bản NGOÀI tikzpicture; trả về
+// văn bản đã sạch + danh sách khai báo cần gắn vào hình (kind = 'keep').
+function removeTikzSetupCommands(segment: string): { clean: string; keep: string[] } {
+  const keep: string[] = [];
+  let out = '';
+  let rest = segment;
+  for (;;) {
+    const hit = findNextTikzSetup(rest);
+    if (!hit) { out += rest; break; }
+    out += rest.slice(0, hit.start);
+    if (hit.kind === 'keep') keep.push(rest.slice(hit.start, hit.end));
+    rest = rest.slice(hit.end);
+    // Nuốt luôn phần xuống dòng ngay sau lệnh để không để lại dòng trống thừa.
+    rest = rest.replace(/^[ \t]*\n/, '');
+  }
+  return { clean: out, keep };
+}
+
+// Chèn các khai báo vào ngay sau \begin{tikzpicture}[tuỳ chọn]? của khối.
+function injectTikzSetup(block: string, defs: string[]): string {
+  if (defs.length === 0) return block;
+  const beginTag = '\\begin{tikzpicture}';
+  let at = beginTag.length;
+  const opt = readArg(block, at, '[');
+  if (opt !== -1) at = opt;
+  return block.slice(0, at) + '\n' + defs.join('\n') + block.slice(at);
+}
+
 // Tách mọi khối \begin{tikzpicture}...\end{tikzpicture} NGOÀI CÙNG khỏi văn
 // bản, có tính đến trường hợp bên trong lại chứa \begin{tikzpicture}...
 // \end{tikzpicture} LỒNG NHAU (một tikzpicture vẽ hình phụ đặt trong node của
@@ -1848,13 +2019,39 @@ function extractTikzBlocks(text: string): { cleanText: string; tikzBlocks: { id:
   let result = '';
   let i = 0;
 
+  // Khai báo TikZ nằm NGOÀI hình (xem removeTikzSetupCommands): globalDefs =
+  // trước câu đầu tiên (áp cho mọi hình), localDefs = trong câu hiện tại (reset
+  // mỗi khi gặp \begin{ex}/\begin{bt}).
+  let globalDefs: string[] = [];
+  let localDefs: string[] = [];
+  let seenQuestion = false;
+  const handleOutside = (segment: string): string => {
+    const parts = segment.split(/(\\begin\{(?:ex|bt)\})/);
+    let cleaned = '';
+    for (const part of parts) {
+      if (/^\\begin\{(?:ex|bt)\}$/.test(part)) {
+        seenQuestion = true;
+        localDefs = [];
+        cleaned += part;
+        continue;
+      }
+      const { clean, keep } = removeTikzSetupCommands(part);
+      if (keep.length) {
+        if (seenQuestion) localDefs.push(...keep);
+        else globalDefs.push(...keep);
+      }
+      cleaned += clean;
+    }
+    return cleaned;
+  };
+
   while (i < text.length) {
     const startIdx = text.indexOf(beginTag, i);
     if (startIdx === -1) {
-      result += text.slice(i);
+      result += handleOutside(text.slice(i));
       break;
     }
-    result += text.slice(i, startIdx);
+    result += handleOutside(text.slice(i, startIdx));
 
     let depth = 1;
     let cursor = startIdx + beginTag.length;
@@ -1875,7 +2072,7 @@ function extractTikzBlocks(text: string): { cleanText: string; tikzBlocks: { id:
       }
     }
 
-    const fullBlock = text.slice(startIdx, cursor);
+    const fullBlock = injectTikzSetup(text.slice(startIdx, cursor), [...globalDefs, ...localDefs]);
     const id = `[[HÌNH_TIKZ_${tikzBlocks.length + 1}]]`;
     tikzBlocks.push({ id, code: fullBlock });
     result += id;

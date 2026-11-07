@@ -105,7 +105,7 @@ export function optimizeSvg(svg: string): string {
 // Đồng bộ với padding phía trình duyệt (examRender.tsx / ExamBuilder.tsx,
 // test biên 17-7: 1.6 -> 0.5). Nếu sau này đổi 1 bên thì nhớ đổi bên kia
 // theo, để "độ sát viền" giữa xem trước và Word/PDF không lệch nhau.
-const CROP_PADDING = 0.5;
+const CROP_PADDING = 2;
 
 // SỬA LỖI (khiếu nại: "đường ngang trên cùng của khung bảng biến thiên bị
 // cắt cụt"): CROP_PADDING cố định 0.5 chỉ đủ cho nét mảnh — resvg.getBBox()
@@ -262,8 +262,8 @@ export function cropTikzSvgToContent(
       // Đồng bộ số với LARGE_GAP_THRESHOLD_PX/SAFE_MARGIN_PX trong
       // examRender.tsx/ExamBuilder.tsx (đơn vị viewBox gốc, không quy đổi
       // pt->px vì server không có DOM/CTM để nhân hệ số đó).
-      const LARGE_GAP_THRESHOLD = 10;
-      const SAFE_MARGIN = 5;
+      const LARGE_GAP_THRESHOLD = 30;
+      const SAFE_MARGIN = 14;
       let vTop = rawBBox.y;
       let vBottom = rawBBox.y + rawBBox.height;
       let visibleBBox: { x: number; y: number; width: number; height: number } | undefined;

@@ -11,51 +11,29 @@
 // file như trước.
 export const APP_NAME = 'Thionline-ap';
 
+// ĐỔI LOGO (25-10): logo mới (khung xanh + Σ + quyển sách) là hình nhiều lớp
+// có chuyển sắc, nên KHÔNG còn vẽ inline bằng <svg> trong code như bản cũ nữa.
+// Lý do: logo này xuất hiện nhiều lần cùng 1 trang (header + drawer di động
+// + các thẻ...), mà gradient trong SVG inline dùng id (bg, cyan, page) — nhiều
+// bản cùng id trong 1 trang dễ lỗi (bản đầu bị display:none thì các bản sau
+// mất màu). Dùng <img src="/logo.svg"> thì mỗi hình là 1 tài liệu SVG riêng,
+// không đụng id nhau, trình duyệt cache 1 lần. Muốn đổi logo lần sau: chỉ cần
+// thay file public/logo.svg (cùng với src/app/favicon.ico và các icon PNG).
+// className giữ nguyên như cũ (w-10 h-10 shrink-0...) nên mọi nơi gọi không
+// phải sửa.
+// 25-10 (logo hiện nhanh): logo NHÚNG THẲNG dạng data URI thay vì <img src="/logo.svg">.
+// Trước đây trình duyệt phải tải thêm file /logo.svg SAU khi trang hiện nên logo
+// "bật" ra trễ 1 nhịp; nay dữ liệu logo đi cùng HTML nên hiện ngay lập tức, không
+// thêm request. Vẫn là <img> (không phải <svg> inline) để các id gradient không đụng
+// nhau khi 1 trang có nhiều logo. File public/logo.svg vẫn giữ cho favicon/tab trình
+// duyệt — đổi logo thì sửa CẢ file đó LẪN chuỗi LOGO_SRC bên dưới (tạo lại bằng
+// base64 của public/logo.svg).
+const LOGO_SRC =
+  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjgyIDgyIDg2MCA4NjAiIHJvbGU9ImltZyIgYXJpYS1sYWJlbD0iVGhpb25saW5lLWFwIGxvZ28iPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMwODdCRkYiLz48c3RvcCBvZmZzZXQ9IjAuNTUiIHN0b3AtY29sb3I9IiMwNjQ4RTgiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMwOTJDQjgiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iY3lhbiIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzAwRTdGNSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzEzQTlGRiIvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJwYWdlIiB4MT0iMCIgeTE9IjAiIHgyPSIwLjkiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNGRkZGRkYiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNEREY1RkYiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48IS0tIFJvdW5kZWQgYXBwIHRpbGU7IDglIGNsZWFyIG1hcmdpbiBmb3IgYWRhcHRpdmUgaWNvbiBjcm9wcGluZyAtLT48cmVjdCB4PSI4MiIgeT0iODIiIHdpZHRoPSI4NjAiIGhlaWdodD0iODYwIiByeD0iMTkwIiBmaWxsPSJ1cmwoI2JnKSIvPjwhLS0gT3JiaXRhbCBzdHJva2UgYmVoaW5kIHRoZSBzeW1ib2wgLS0+PHBhdGggZD0iTTMwMCA1OTUgQzM1NSA1MDAgNDY1IDQ0OCA2MjAgMzk0IEM3MTIgMzYxIDc2NCAzMDkgNzcwIDI1MyIKICAgICAgICBmaWxsPSJub25lIiBzdHJva2U9InVybCgjY3lhbikiIHN0cm9rZS13aWR0aD0iNDIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik03NjAgMjgyIEM3NDggNDMzIDYxNCA1NjIgNDA1IDYyMyBDMzIyIDY0OCAyNjAgNjM0IDIzNSA1OTIgQzIwOCA1NDYgMjQ5IDQ4MiAzMzEgNDMwIgogICAgICAgIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCNjeWFuKSIgc3Ryb2tlLXdpZHRoPSIzNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGNpcmNsZSBjeD0iNzcwIiBjeT0iMjQ4IiByPSI0OSIgZmlsbD0idXJsKCNjeWFuKSIvPjxjaXJjbGUgY3g9Ijc3MCIgY3k9IjI0OCIgcj0iMjciIGZpbGw9IiNGRkZGRkYiLz48IS0tIEJvbGQgU2lnbWEgLS0+PHBhdGggZD0iTTM0NyAyNzYgSDY1MQogICAgICAgICAgIFE2NzEgMjc2IDY3MSAyOTcgVjMxOAogICAgICAgICAgIFE2NzEgMzM4IDY1MCAzMzggSDQ1NgogICAgICAgICAgIEw1NDggNDM2CiAgICAgICAgICAgUTU2NSA0NTQgNTQ4IDQ3MiBMNDU2IDU2OAogICAgICAgICAgIEg2MjkKICAgICAgICAgICBRNjUxIDU2OCA2NTEgNTkwIFY2MDgKICAgICAgICAgICBRNjUxIDYzMCA2MjkgNjMwIEgzNDcKICAgICAgICAgICBRMzIwIDYzMCAzMjAgNjA0CiAgICAgICAgICAgUTMyMCA1OTAgMzMzIDU3NiBMNDQzIDQ1NQogICAgICAgICAgIEwzMzMgMzM1CiAgICAgICAgICAgUTMyMCAzMjEgMzIwIDMwNQogICAgICAgICAgIFEzMjAgMjc2IDM0NyAyNzYgWiIKICAgICAgICBmaWxsPSIjRkZGRkZGIi8+PCEtLSBPcGVuIGJvb2ssIHRoaWNrIHNpbXBsaWZpZWQgcGFnZXMgLS0+PHBhdGggZD0iTTIxNCA2NTAKICAgICAgICAgICBDMzE1IDY3NSA0MjAgNzEyIDUxMiA4MDQKICAgICAgICAgICBDNTk0IDcxNSA3MDEgNjc1IDgxMCA2NDUKICAgICAgICAgICBMODQyIDcxOQogICAgICAgICAgIEM3MjQgNzQ5IDYxMiA3OTYgNTI2IDg3NAogICAgICAgICAgIFE1MTIgODg3IDQ5OCA4NzQKICAgICAgICAgICBDNDE0IDc5NiAzMDMgNzU4IDE4NCA3MzUgWiIKICAgICAgICBmaWxsPSJ1cmwoI3BhZ2UpIi8+PHBhdGggZD0iTTE4MSA3NTQKICAgICAgICAgICBDMzAzIDc3NSA0MTYgODExIDUxMiA4OTUKICAgICAgICAgICBDNjA4IDgxMSA3MjEgNzc1IDg0MyA3NTQKICAgICAgICAgICBMODYxIDgwMgogICAgICAgICAgIEM3MjQgODI3IDYxMSA4NjYgNTMxIDkyMwogICAgICAgICAgIFE1MTIgOTM3IDQ5MyA5MjMKICAgICAgICAgICBDNDEzIDg2NiAzMDAgODI3IDE2MyA4MDIgWiIKICAgICAgICBmaWxsPSJ1cmwoI2N5YW4pIi8+PHBhdGggZD0iTTUxMiA4MDQgVjg5NSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjEyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L3N2Zz4=';
+
 export function AppLogoIcon({ className }: { className?: string }) {
-  // SỬA (khiếu nại: "logo hiện không đủ trên điện thoại" + "thiết kế lại
-  // hình vuông nét mảnh, bo góc nhẹ, không đổ bóng") — bản trước dùng viền
-  // dày (strokeWidth 6), bo góc lớn (rx 22) VÀ đổ bóng mờ (filter blur), 3
-  // thứ cộng lại khiến icon rối/nặng khi thu nhỏ xuống cỡ header điện thoại
-  // (~28px) — các nét chồng lên nhau, nhìn như chỉ còn mỗi dấu tick. Sửa cả
-  // 3: (1) bỏ hẳn filter đổ bóng, (2) giảm rx 22→10 (bo nhẹ, gần vuông hơn
-  // là bo tròn), (3) giảm strokeWidth viền 6→3.2 và 2 ký tự bên trong
-  // 6.05→4.4 (nét mảnh) — icon gọn, rõ nét kể cả ở cỡ rất nhỏ.
-  //
-  // SỬA TIẾP (khiếu nại: "để điện thoại dọc thì logo mất, chỉ còn chữ V")
-  // — bản sửa trên làm nét MẢNH quá tay, cộng với gradient bạc/vàng trước
-  // đó có nhiều điểm dừng gần trắng (#f7f8fa, #eef0f3, #fff2b0...) — trên
-  // nền trắng của thanh header/drawer di động, viền vuông + ký hiệu Σ gần
-  // như vô hình, chỉ còn dấu ✓ xanh lá (nét đậm màu duy nhất) đủ rõ để
-  // thấy — nhìn nhầm thành chữ "V" đơn độc. Bản sửa lúc đó CHỈ đổi gradient
-  // sang các điểm dừng đậm hơn — vẫn KHÔNG đủ, vì gốc vấn đề không phải độ
-  // đậm/nhạt của từng điểm dừng mà là bản chất gradient trên nét MẢNH: ở
-  // cỡ icon header di động (~24-28px), 1 nét stroke chỉ còn rộng ~1-1.5px
-  // sau khi scale — quá hẹp để trình duyệt render rõ dải chuyển màu, các
-  // điểm dừng bị làm mờ/trộn lẫn (anti-alias) thành 1 vệt xám nhạt gần như
-  // trong suốt trên nền trắng. Dấu ✓ là màu ĐẶC (flat color) duy nhất nên
-  // vẫn hiện rõ, còn viền vuông + Σ (đều dùng gradient) gần như biến mất
-  // → nhìn chỉ còn mỗi ✓, dễ đọc nhầm thành chữ "V".
-  //
-  // SỬA ĐÚNG GỐC: bỏ hẳn 2 gradient, đổi viền vuông + Σ sang MÀU ĐẶC (flat)
-  // như dấu ✓ — cùng bản chất render nên cùng luôn rõ nét ở MỌI kích cỡ,
-  // không chỉ riêng dấu ✓ còn thấy được nữa.
   return (
-    <svg viewBox="0 0 100 100" fill="none" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="7" y="7" width="86" height="86" rx="10" fill="none" stroke="#4b5563" strokeWidth="4.2" />
-      <path
-        d="M54.28 32.36 L19 32.36 L39.16 50 L19 67.64 L54.28 67.64"
-        stroke="#b8860b"
-        strokeWidth="5.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M50.76 52.52 L61.84 63.61 L81 35.89"
-        stroke="#2f8f2f"
-        strokeWidth="5.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={LOGO_SRC} alt="" aria-hidden="true" width={40} height={40} decoding="sync" className={className} draggable={false} />
   );
 }

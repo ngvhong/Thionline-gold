@@ -17,6 +17,7 @@
 // src/app/api/library/thi/[examId]/start/route.ts (route MỚI duy nhất).
 import { useEffect, useRef, useState } from 'react';
 import StudentTakeExam from '@/app/thi/[examId]/StudentTakeExam';
+import PracticeRunner from '@/app/student/PracticeRunner';
 import SolutionView from '@/app/thi/[examId]/SolutionView';
 import { round2 } from '@/lib/grading';
 import type { P1Answers, P2Answers, TextAnswers, ScoringSettings } from '@/lib/grading';
@@ -38,9 +39,13 @@ type LibraryExamRow = {
   title: string;
   teacherName: string;
   questionCount: number;
+  created_at?: string | null;
+  published_at?: string | null;
   bestScorePoints: number | null;
   bestMaxScorePoints: number | null;
   attempts: number;
+  // 25-10: tiến độ Ôn luyện (chỉ mode practice, đã đăng nhập, đã từng làm).
+  practice?: { answered: number; total: number; scorePoints: number; maxScorePoints: number; solutionCount: number } | null;
 };
 
 type ExamSession = {
@@ -167,6 +172,7 @@ function PracticeExamRunner({ examId, onBack }: { examId: string; onBack: () => 
             rawData={session.raw_data}
             settings={session.settings}
             endAt={session.endAt}
+            hideEssay
             onSubmitted={(r) => {
               setResult(r);
               setShowSolutionView(false);
@@ -245,6 +251,38 @@ function PracticeExamRunner({ examId, onBack }: { examId: string; onBack: () => 
   return null;
 }
 
+// Tab Thi thử chỉ hiện: Chủ đề lớp 10/11/12 > GK1, CK1, GK2, CK2 (và mọi thứ nằm bên trong các nhánh đó).
+// Các Chương/Bài chỉ dành cho tab Ôn luyện. Chỉ lọc ở phía hiển thị, không đổi dữ liệu.
+const isMockRoot = (n: string) => /^thi\s*thử/i.test(n.trim());
+
+// Tab Ôn luyện ẩn các gốc "Thi thử ..." (đề thi thử chỉ làm ở tab Thi thử).
+function hideMockRoots(all: FolderNode[]): FolderNode[] {
+  const hide = new Set<string>();
+  const add = (id: string) => {
+    hide.add(id);
+    for (const c of all) if (c.parentId === id) add(c._id);
+  };
+  for (const r of all.filter((f) => !f.parentId && isMockRoot(f.name))) add(r._id);
+  return all.filter((f) => !hide.has(f._id));
+}
+
+function keepOnlyMockFolders(all: FolderNode[]): FolderNode[] {
+  const isGrade = (n: string) => /lớp\s*(10|11|12)\b/i.test(n);
+  const isTerm = (n: string) => /^(GK|CK)\s*[12]$/i.test(n.trim());
+  const keep = new Set<string>();
+  const addWithDescendants = (id: string) => {
+    keep.add(id);
+    for (const c of all) if (c.parentId === id) addWithDescendants(c._id);
+  };
+  // Gốc "Thi thử THPT QG ...": giữ nguyên cả nhánh.
+  for (const r of all.filter((f) => !f.parentId && isMockRoot(f.name))) addWithDescendants(r._id);
+  for (const g of all.filter((f) => !f.parentId && isGrade(f.name))) {
+    keep.add(g._id);
+    for (const t of all.filter((f) => f.parentId === g._id && isTerm(f.name))) addWithDescendants(t._id);
+  }
+  return all.filter((f) => keep.has(f._id));
+}
+
 // ============================================================
 // ---------- Duyệt cây thư mục (dạng "đào sâu" từng cấp — phù
 // hợp khung hẹp max-w-md của cổng học sinh, khác cây thu/phóng 2
@@ -255,7 +293,11 @@ export default function LibraryPracticeTab({
   onRequestAuth,
   autoStartExamId,
   onAutoStartConsumed,
+  mode = 'practice',
 }: {
+  // 25-10: 'practice' = Ôn luyện tương tác (PracticeRunner); 'mock' = Thi thử (làm như thi
+  // thật, bấm giờ, nộp 1 lần — chính là luồng cũ PracticeExamRunner).
+  mode?: 'practice' | 'mock';
   // true khi đã có tài khoản đăng nhập — false vẫn xem được cây/list bình
   // thường (đúng yêu cầu "chưa đăng nhập vẫn xem được"), chỉ chặn lúc BẤM
   // VÀO LÀM 1 đề cụ thể.
@@ -280,13 +322,15 @@ export default function LibraryPracticeTab({
   const [examsError, setExamsError] = useState('');
 
   const [runningExamId, setRunningExamId] = useState<string | null>(null);
+  // 25-10: ô tìm trong danh sách đề của thư mục đang mở (chỉ hiện khi > 8 đề).
+  const [examQuery, setExamQuery] = useState('');
 
   async function loadTree() {
     setTreeLoading(true);
     setTreeError('');
     try {
-      const data = await apiFetch<{ folders: FolderNode[] }>('/api/library/tree?audience=student');
-      setFolders(data.folders);
+      const data = await apiFetch<{ folders: FolderNode[] }>(`/api/library/tree?audience=student&mode=${mode}`);
+      setFolders(mode === 'mock' ? keepOnlyMockFolders(data.folders) : hideMockRoots(data.folders));
     } catch (err: any) {
       setTreeError(err.message || 'Không tải được cây thư mục.');
     } finally {
@@ -303,7 +347,7 @@ export default function LibraryPracticeTab({
     setExamsError('');
     try {
       const data = await apiFetch<{ exams: LibraryExamRow[] }>(
-        `/api/library/exams?folderId=${folderId}&audience=student`
+        `/api/library/exams?folderId=${folderId}&audience=student&mode=${mode}`
       );
       setExams(data.exams);
     } catch (err: any) {
@@ -314,6 +358,7 @@ export default function LibraryPracticeTab({
   }
 
   useEffect(() => {
+    setExamQuery('');
     if (currentParentId) loadExams(currentParentId);
     else setExams([]);
   }, [currentParentId]);
@@ -346,7 +391,11 @@ export default function LibraryPracticeTab({
   }
 
   if (runningExamId) {
-    return <PracticeExamRunner examId={runningExamId} onBack={handleBackFromRunner} />;
+    return mode === 'mock' ? (
+      <PracticeExamRunner examId={runningExamId} onBack={handleBackFromRunner} />
+    ) : (
+      <PracticeRunner examId={runningExamId} onBack={handleBackFromRunner} />
+    );
   }
 
   const children = folders.filter((f) => f.parentId === currentParentId);
@@ -376,7 +425,7 @@ export default function LibraryPracticeTab({
       )}
 
       {/* Breadcrumb */}
-      <div className="flex items-center flex-wrap gap-1 text-xs text-gray-500 mb-2">
+      <div className="flex items-center flex-wrap gap-x-1 gap-y-0 text-sm text-gray-500 mb-2 [&_button]:py-2">
         <button type="button" onClick={() => setPath([])} className="hover:text-blue-600 hover:underline">
           Kho đề
         </button>
@@ -399,6 +448,9 @@ export default function LibraryPracticeTab({
 
       {!treeLoading && !treeError && (
         <>
+          {children.length > 0 && !currentParentId && (
+            <p className="text-xs text-gray-500 mb-2">Bấm vào một thư mục để mở và xem các đề bên trong.</p>
+          )}
           {children.length > 0 && (
             <ul className="space-y-1.5 mb-3">
               {children
@@ -419,6 +471,11 @@ export default function LibraryPracticeTab({
                           <span className="text-xs text-gray-400">{total} đề</span>
                         ) : null;
                       })()}
+                      {/* 25-10: mũi tên ">" rõ ràng bên phải = "bấm để mở thư mục này"
+                          (trước đây hàng thư mục không có dấu hiệu gì là bấm được). */}
+                      <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 shrink-0 text-gray-400" aria-hidden="true">
+                        <path d="m9 6 6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
                     </button>
                   </li>
                 ))}
@@ -436,18 +493,46 @@ export default function LibraryPracticeTab({
                       <p className="text-sm text-gray-400 text-center py-4">Mục này chưa có đề nào.</p>
                     )
                   ) : (
-                    <ul className="space-y-1.5">
-                      {exams.map((e) => (
+                    <>
+                    {exams.length > 8 && (
+                      <input
+                        type="search"
+                        value={examQuery}
+                        onChange={(ev) => setExamQuery(ev.target.value)}
+                        placeholder={`Tìm trong ${exams.length} đề…`}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-base outline-none focus:border-blue-400 mb-2"
+                      />
+                    )}
+                    {/* Khung cuộn riêng (thanh mảnh) khi có nhiều đề; đề MỚI nhất nằm trên cùng
+                        (API đã sắp theo ngày xuất bản giảm dần). */}
+                    <ul className="space-y-1.5 max-h-[60vh] overflow-y-auto thin-scroll pr-1">
+                      {exams
+                        .filter((e) => !examQuery.trim() || e.title.toLowerCase().includes(examQuery.trim().toLowerCase()))
+                        .map((e) => (
                         <li key={e._id}>
                           <button
                             type="button"
                             onClick={() => handleTapExam(e._id)}
                             className="w-full text-left px-3 py-2.5 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-200 transition"
                           >
-                            <p className="text-sm font-semibold text-gray-800">{e.title}</p>
+                            <p className="text-sm font-semibold text-gray-800">
+                              {e.title}
+                              {(() => {
+                                const t = new Date(e.published_at || e.created_at || 0).getTime();
+                                return t && Date.now() - t < 14 * 24 * 3600 * 1000 ? (
+                                  <span className="ml-1.5 align-middle text-[10px] font-bold text-white bg-red-500 rounded px-1.5 py-0.5">MỚI</span>
+                                ) : null;
+                              })()}
+                            </p>
                             <p className="text-xs text-gray-400">
                               GV {e.teacherName} · {e.questionCount} câu
-                              {e.attempts > 0 && (
+                              {mode === 'practice' && e.practice && e.practice.answered > 0 && (
+                                <span className="ml-1.5 text-emerald-600 font-semibold">
+                                  · Đã ôn {e.practice.answered}/{e.practice.total} câu — {round2(e.practice.scorePoints)}/{round2(e.practice.maxScorePoints)}đ
+                                  {e.practice.solutionCount > 0 && ` · đã xem lời giải ${e.practice.solutionCount} câu`}
+                                </span>
+                              )}
+                              {mode === 'mock' && e.attempts > 0 && (
                                 <span className="ml-1.5 text-emerald-600 font-semibold">
                                   · Đã làm {e.attempts} lần — {round2(e.bestScorePoints ?? 0)}/{round2(e.bestMaxScorePoints ?? 0)}đ (cao nhất)
                                 </span>
@@ -457,6 +542,7 @@ export default function LibraryPracticeTab({
                         </li>
                       ))}
                     </ul>
+                    </>
                   )}
                 </>
               )}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import { LibraryFolder } from '@/lib/libraryFolderModel';
+import { ensureKnttTreeOnce } from '@/lib/seedKnttTree';
 import { Exam } from '@/lib/examModel';
 import { getVerifiedTeacherIdFromRequest } from '@/lib/auth';
 
@@ -34,10 +35,13 @@ export async function GET(request: NextRequest) {
     }
 
     await connectToDatabase();
+    await ensureKnttTreeOnce(); // tự tạo cây Toán KNTT lần đầu mở
 
     const folders = await LibraryFolder.find().sort({ parentId: 1, order: 1, name: 1 }).lean();
 
-    const matchField = forStudent ? 'openForStudents' : 'shareWithTeachers';
+    // 25-10: ?mode=mock → đếm đề mở cho "Thi thử"; mặc định (practice) → "Ôn luyện".
+    const mode = request.nextUrl.searchParams.get('mode');
+    const matchField = forStudent ? (mode === 'mock' ? 'openForMockExam' : 'openForStudents') : 'shareWithTeachers';
     const counts = await Exam.aggregate([
       { $match: { [matchField]: true, sharedFolderId: { $ne: null } } },
       { $group: { _id: '$sharedFolderId', count: { $sum: 1 } } },

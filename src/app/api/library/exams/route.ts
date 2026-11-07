@@ -9,6 +9,7 @@ import { getVerifiedTeacherIdFromRequest } from '@/lib/auth';
 // hàm đọc cookie đã có sẵn từ Giai đoạn 1, không sửa gì studentAuth.ts.
 import { getVerifiedStudentAccountIdFromRequest } from '@/lib/studentAuth';
 import { SubmissionModel } from '@/lib/submissionModel';
+import { PracticeProgressModel } from '@/lib/practiceProgressModel';
 
 // THÊM MỚI (Giai đoạn 3 — Kho đề chung giữa giáo viên): trả danh sách đề đã
 // `shareWithTeachers = true` trong 1 nhánh cụ thể (?folderId=) — dùng cho
@@ -52,7 +53,9 @@ export async function GET(request: NextRequest) {
 
     await connectToDatabase();
 
-    const shareField = forStudent ? 'openForStudents' : 'shareWithTeachers';
+    // 25-10: ?mode=mock -> đề mở cho "Thi thử"; mặc định -> "Ôn luyện" (tương tác).
+    const isMock = request.nextUrl.searchParams.get('mode') === 'mock';
+    const shareField = forStudent ? (isMock ? 'openForMockExam' : 'openForStudents') : 'shareWithTeachers';
     const exams = await Exam.find({ sharedFolderId: folderId, [shareField]: true })
       .select('title created_at published_at teacherId raw_data')
       .sort({ created_at: -1 })
@@ -72,7 +75,7 @@ export async function GET(request: NextRequest) {
     // luồng "Ôn luyện" (xem /api/library/thi/[examId]/start), không lẫn
     // lượt "Đề được giao" (luôn có studentId) của cùng account+exam.
     const bestByExamId: Record<string, { bestScorePoints: number | null; bestMaxScorePoints: number | null; attempts: number }> = {};
-    if (forStudent && exams.length > 0) {
+    if (forStudent && isMock && exams.length > 0) {
       const studentAccountId = await getVerifiedStudentAccountIdFromRequest(request);
       if (studentAccountId) {
         const examIds = exams.map((e: any) => e._id);
@@ -101,6 +104,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 25-10: tiến độ Ôn luyện (mỗi đề 1 bản ghi) — chỉ khi mode practice + đã đăng nhập.
+    const practiceByExam: Record<string, any> = {};
+    if (forStudent && !isMock && exams.length > 0) {
+      const studentAccountId = await getVerifiedStudentAccountIdFromRequest(request);
+      if (studentAccountId) {
+        const rows: any[] = await PracticeProgressModel.find({
+          studentAccountId,
+          examId: { $in: exams.map((e: any) => e._id) },
+        })
+          .select('examId answered total scorePoints maxScorePoints solutionCount attempts')
+          .lean();
+        for (const r of rows) practiceByExam[String(r.examId)] = r;
+      }
+    }
+
     const result = exams.map((e: any) => {
       const raw = e.raw_data || {};
       const questionCount =
@@ -121,8 +139,23 @@ export async function GET(request: NextRequest) {
         bestScorePoints: best?.bestScorePoints ?? null,
         bestMaxScorePoints: best?.bestMaxScorePoints ?? null,
         attempts: best?.attempts ?? 0,
+        practice: practiceByExam[String(e._id)]
+          ? {
+              answered: practiceByExam[String(e._id)].answered || 0,
+              total: practiceByExam[String(e._id)].total || 0,
+              scorePoints: practiceByExam[String(e._id)].scorePoints || 0,
+              maxScorePoints: practiceByExam[String(e._id)].maxScorePoints || 0,
+              solutionCount: practiceByExam[String(e._id)].solutionCount || 0,
+            }
+          : null,
       };
     });
+
+    // 25-10: ĐỀ MỚI LÊN ĐẦU — xếp theo ngày xuất bản (published_at, lúc đề được
+    // chia sẻ/đăng), thiếu thì theo ngày tạo. Trước đây chỉ theo created_at nên đề
+    // tạo từ lâu nhưng MỚI chia sẻ lại nằm cuối danh sách.
+    const stamp = (x: any) => new Date(x.published_at || x.created_at || 0).getTime() || 0;
+    result.sort((a: any, b: any) => stamp(b) - stamp(a));
 
     return NextResponse.json({ exams: result }, { status: 200 });
   } catch (err) {

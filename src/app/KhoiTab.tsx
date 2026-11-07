@@ -10,6 +10,7 @@
 
 import { useState, useEffect, type FormEvent, type ReactNode } from 'react';
 import ClassDetailPanel from './ClassDetailPanel';
+import { DEFAULT_EXAM_DURATION_MINUTES, DEFAULT_EXAM_MAX_ATTEMPTS } from '@/lib/examDefaults';
 
 // ---------- Kiểu dữ liệu, khớp đúng response API Phần 3a ----------
 
@@ -40,6 +41,7 @@ type AssignSettings = {
   duration: number;
   shuffle: boolean;
   maxAttempts: number;
+  scoreMode: 'highest' | 'latest';
   showSolution: ShowSolutionMode;
   solutionOpenAt: string;
   openAt: string;
@@ -490,9 +492,10 @@ function AssignExamModal({
 
   const [useCustomSettings, setUseCustomSettings] = useState(false);
   const [customSettings, setCustomSettings] = useState<AssignSettings>({
-    duration: 45,
+    duration: DEFAULT_EXAM_DURATION_MINUTES,
     shuffle: false,
-    maxAttempts: 0,
+    maxAttempts: DEFAULT_EXAM_MAX_ATTEMPTS,
+    scoreMode: 'highest' as 'highest' | 'latest',
     showSolution: 'after_submit',
     solutionOpenAt: '',
     openAt: '',
@@ -553,6 +556,7 @@ function AssignExamModal({
                 duration: Number(merged.duration) || 45,
                 shuffle: !!merged.shuffle,
                 maxAttempts: Number(merged.maxAttempts) || 0,
+                scoreMode: (merged.scoreMode === 'latest' ? 'latest' : 'highest') as 'highest' | 'latest',
                 showSolution: merged.showSolution || 'after_submit',
                 solutionOpenAt: isoToDatetimeLocal(merged.solutionOpenAt || null),
                 openAt: isoToDatetimeLocal(merged.openAt || null),
@@ -612,6 +616,7 @@ function AssignExamModal({
                   duration: Math.max(1, Number(customSettings.duration) || 45),
                   shuffle: customSettings.shuffle,
                   maxAttempts: Math.max(0, Number(customSettings.maxAttempts) || 0),
+                  scoreMode: customSettings.scoreMode,
                   showSolution: customSettings.showSolution,
                   solutionOpenAt: datetimeLocalToIso(customSettings.solutionOpenAt),
                   openAt: datetimeLocalToIso(customSettings.openAt),
@@ -744,6 +749,17 @@ function AssignExamModal({
                             className="w-full border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-200"
                           />
                         </label>
+                    <label className="block">
+                      <span className="text-[11px] text-amber-700 block mb-1">Cách tính điểm (làm nhiều lần)</span>
+                      <select
+                        value={customSettings.scoreMode}
+                        onChange={(e) => setCustomSettings((s) => ({ ...s, scoreMode: e.target.value === 'latest' ? 'latest' : 'highest' }))}
+                        className="w-full border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                      >
+                        <option value="highest">Lấy điểm cao nhất</option>
+                        <option value="latest">Lấy điểm lần làm cuối</option>
+                      </select>
+                    </label>
                       </div>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input

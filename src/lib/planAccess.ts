@@ -1,4 +1,4 @@
-import { FREE_EXPIRING_SOON_DAYS, ADMIN_CONTACT } from './adminConfig';
+import { ADMIN_CONTACT } from './adminConfig';
 
 // THÊM MỚI (gói dùng free/vĩnh viễn): NƠI DUY NHẤT tính trạng thái gói dùng
 // từ dữ liệu thô của Teacher (planType + freeExpiresAt) — mọi route chặn
@@ -25,40 +25,17 @@ type TeacherPlanFields = {
 };
 
 export function computePlanStatus(teacher: TeacherPlanFields): PlanStatus {
-  const planType: 'free' | 'lifetime' = teacher.planType === 'lifetime' ? 'lifetime' : 'free';
-  const isLifetime = planType === 'lifetime';
-
-  // Tài khoản lifetime hoặc chưa từng được set hạn (tài khoản cũ, xem ghi
-  // chú teacherModel.ts) → coi như không có hạn áp dụng, không bao giờ bị
-  // chặn bởi tính năng này.
-  const freeExpiresAt = !isLifetime && teacher.freeExpiresAt ? new Date(teacher.freeExpiresAt) : null;
-
-  if (isLifetime || !freeExpiresAt) {
-    return {
-      planType,
-      isLifetime,
-      freeExpiresAt: null,
-      isExpired: false,
-      isExpiringSoon: false,
-      daysRemaining: null,
-    };
-  }
-
-  const now = Date.now();
-  const msRemaining = freeExpiresAt.getTime() - now;
-  // Làm tròn LÊN theo ngày — còn vài giờ vẫn tính là "còn 1 ngày", tránh
-  // hiện "còn 0 ngày" gây hiểu nhầm là đã hết hạn trong khi thực ra chưa.
-  const daysRemaining = Math.ceil(msRemaining / (24 * 60 * 60 * 1000));
-  const isExpired = msRemaining <= 0;
-  const isExpiringSoon = !isExpired && daysRemaining <= FREE_EXPIRING_SOON_DAYS;
-
+  // SỬA (25-10): app MIỄN PHÍ cho GV và HS, KHÔNG còn dùng thử/hết hạn. Luôn trả
+  // về "không có hạn áp dụng" cho mọi tài khoản (kể cả tài khoản cũ đã có
+  // freeExpiresAt trong DB) nên không route/banner nào còn chặn hay nhắc gia hạn.
+  const isLifetime = teacher.planType === 'lifetime';
   return {
-    planType,
+    planType: isLifetime ? 'lifetime' : 'free',
     isLifetime,
-    freeExpiresAt,
-    isExpired,
-    isExpiringSoon,
-    daysRemaining,
+    freeExpiresAt: null,
+    isExpired: false,
+    isExpiringSoon: false,
+    daysRemaining: null,
   };
 }
 

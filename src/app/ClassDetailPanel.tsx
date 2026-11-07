@@ -29,6 +29,8 @@ import { gradeExam, computeEssayMax, round2 } from '@/lib/grading';
 import { scrollFadeX } from '@/lib/scrollFade';
 import { AppLogoIcon } from '@/components/AppBranding';
 import EssayAnnotator from '@/components/EssayAnnotator';
+import { essayQuickValues } from '@/lib/essayQuickScores';
+import { DEFAULT_EXAM_DURATION_MINUTES, DEFAULT_EXAM_MAX_ATTEMPTS } from '@/lib/examDefaults';
 
 // ============================================================
 // ---------- Kiểu dữ liệu, khớp đúng response của API (xem GET/PUT
@@ -460,7 +462,17 @@ function IconButton({
 // /api/submissions/[id] (có kiểm tra ownerId), rồi tự chấm lại bằng
 // gradeExam (dùng chung với server) để tô đúng/sai từng câu.
 // ============================================================
-function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string; onClose: () => void }) {
+function SubmissionDetailModal({
+  submissionId,
+  onClose,
+  onGradeNext,
+}: {
+  submissionId: string;
+  onClose: () => void;
+  // THÊM MỚI: chuyển sang bài tự luận của em kế tiếp còn chờ chấm.
+  onGradeNext?: () => Promise<void> | void;
+}) {
+  const [goingNext, setGoingNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [detail, setDetail] = useState<any>(null);
@@ -468,6 +480,7 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
   // khỏi `detail` để gõ số mượt (không phải load lại toàn bộ modal mỗi lần
   // gõ) — key = questionId.
   const [essayScoreInputs, setEssayScoreInputs] = useState<Record<string, string>>({});
+  const [essayCommentInputs, setEssayCommentInputs] = useState<Record<string, string>>({});
   const [savingEssayQuestion, setSavingEssayQuestion] = useState<string | null>(null);
   const [essayScoreErrors, setEssayScoreErrors] = useState<Record<string, string>>({});
   // Ảnh đang mở trong công cụ "Chấm trên ảnh" — null = đóng.
@@ -484,6 +497,7 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
         setEssayScoreInputs(
           Object.fromEntries(Object.entries(scores).map(([qid, v]) => [qid, String(v)]))
         );
+        setEssayCommentInputs({ ...(data.submission.essayComments || {}) });
       } catch (err: any) {
         setError(err.message || 'Không tải được bài làm.');
       } finally {
@@ -505,13 +519,13 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
       const res = await fetch(`/api/submissions/${submissionId}/essay-score`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questionId, score: value }),
+        body: JSON.stringify({ questionId, score: value, comment: essayCommentInputs[questionId] ?? '' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Không lưu được điểm.');
       setDetail((prev: any) => ({
         ...prev,
-        submission: { ...prev.submission, essayScores: data.essayScores, essayGraded: data.essayGraded },
+        submission: { ...prev.submission, essayScores: data.essayScores, essayGraded: data.essayGraded, essayComments: data.essayComments },
       }));
     } catch (err: any) {
       setEssayScoreErrors((prev) => ({ ...prev, [questionId]: err.message || 'Không lưu được điểm.' }));
@@ -558,9 +572,27 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
       <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-gray-900">{detail?.examTitle || 'Bài làm'}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <CloseIcon className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            {onGradeNext && (
+              <button
+                onClick={async () => {
+                  setGoingNext(true);
+                  try {
+                    await onGradeNext();
+                  } finally {
+                    setGoingNext(false);
+                  }
+                }}
+                disabled={goingNext}
+                className="text-xs font-semibold bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {goingNext ? 'Đang tìm...' : 'Chấm em tiếp theo →'}
+              </button>
+            )}
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <CloseIcon className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {loading && <p className="text-sm text-gray-400">Đang tải...</p>}
@@ -669,7 +701,7 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
                                       <button
                                         type="button"
                                         onClick={() => setAnnotating({ questionId: q.id, imageIndex: idx, url: displayUrl })}
-                                        title="Bấm để chấm trên ảnh (bút đỏ)"
+                                        title="Bấm để chấm trên ảnh"
                                         className="block"
                                       >
                                         <img
@@ -693,6 +725,27 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
                               <p className="text-xs text-gray-400 italic mb-3">Học sinh chưa nộp ảnh câu này.</p>
                             )}
 
+                            <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                              <span className="text-xs text-gray-500">Chấm nhanh:</span>
+                              {essayQuickValues(essayQuestions.length ? essayMaxScore / essayQuestions.length : 1).map((v) => (
+                                <button
+                                  key={v}
+                                  type="button"
+                                  onClick={() => setEssayScoreInputs((prev) => ({ ...prev, [q.id]: String(v) }))}
+                                  className="text-xs px-2 py-0.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50"
+                                >
+                                  {v}
+                                </button>
+                              ))}
+                            </div>
+                            <input
+                              type="text"
+                              maxLength={500}
+                              placeholder="Nhận xét cho học sinh (không bắt buộc)"
+                              value={essayCommentInputs[q.id] ?? ''}
+                              onChange={(e) => setEssayCommentInputs((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                            />
                             <div className="flex items-center gap-2 flex-wrap">
                               <label className="text-xs font-medium text-gray-600">Điểm câu {i + 1}:</label>
                               <input
@@ -726,6 +779,24 @@ function SubmissionDetailModal({ submissionId, onClose }: { submissionId: string
               </div>
             )}
           </>
+        )}
+        {detail && onGradeNext && detail.submission?.essayGraded && (
+          <div className="mt-5 pt-4 border-t border-gray-100 flex justify-end">
+            <button
+              onClick={async () => {
+                setGoingNext(true);
+                try {
+                  await onGradeNext();
+                } finally {
+                  setGoingNext(false);
+                }
+              }}
+              disabled={goingNext}
+              className="text-sm font-semibold bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {goingNext ? 'Đang tìm...' : 'Đã chấm xong — Chấm em tiếp theo →'}
+            </button>
+          </div>
         )}
       </div>
       {annotating && (
@@ -1076,9 +1147,10 @@ function AssignExamPanel({
   const [examDefaultSettings, setExamDefaultSettings] = useState<any>({});
   const [useCustomSettings, setUseCustomSettings] = useState(false);
   const [customSettings, setCustomSettings] = useState({
-    duration: 45,
+    duration: DEFAULT_EXAM_DURATION_MINUTES,
     shuffle: false,
-    maxAttempts: 0,
+    maxAttempts: DEFAULT_EXAM_MAX_ATTEMPTS,
+    scoreMode: 'highest' as 'highest' | 'latest',
     showSolution: 'after_submit' as 'after_submit' | 'never' | 'after_close' | 'custom_time',
     solutionOpenAt: '',
     openAt: '',
@@ -1112,6 +1184,7 @@ function AssignExamPanel({
           duration: Number(merged.duration) || 45,
           shuffle: !!merged.shuffle,
           maxAttempts: Number(merged.maxAttempts) || 0,
+          scoreMode: (merged.scoreMode === 'latest' ? 'latest' : 'highest') as 'highest' | 'latest',
           showSolution: merged.showSolution || 'after_submit',
           solutionOpenAt: isoToDatetimeLocal(merged.solutionOpenAt || null),
           openAt: isoToDatetimeLocal(merged.openAt || null),
@@ -1144,6 +1217,7 @@ function AssignExamPanel({
                 duration: Math.max(1, Number(customSettings.duration) || 45),
                 shuffle: customSettings.shuffle,
                 maxAttempts: Math.max(0, Number(customSettings.maxAttempts) || 0),
+                scoreMode: customSettings.scoreMode,
                 showSolution: customSettings.showSolution,
                 solutionOpenAt: datetimeLocalToIso(customSettings.solutionOpenAt),
                 openAt: datetimeLocalToIso(customSettings.openAt),
@@ -1365,6 +1439,17 @@ function AssignExamPanel({
                         onChange={(e) => setCustomSettings((s) => ({ ...s, maxAttempts: Math.max(0, Number(e.target.value) || 0) }))}
                         className="w-full border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-200"
                       />
+                    </label>
+                    <label className="block">
+                      <span className="text-[11px] text-amber-700 block mb-1">Cách tính điểm (làm nhiều lần)</span>
+                      <select
+                        value={customSettings.scoreMode}
+                        onChange={(e) => setCustomSettings((s) => ({ ...s, scoreMode: e.target.value === 'latest' ? 'latest' : 'highest' }))}
+                        className="w-full border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                      >
+                        <option value="highest">Lấy điểm cao nhất</option>
+                        <option value="latest">Lấy điểm lần làm cuối</option>
+                      </select>
                     </label>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -1590,6 +1675,15 @@ export default function ClassDetailPanel({
   // mới mỗi 20 giây để GV không cần bấm F5 khi có em bắt đầu/nộp bài trong
   // lúc đang xem danh sách lớp.
   const [studentActivityStatus, setStudentActivityStatus] = useState<Record<string, string>>({});
+  // THÊM MỚI: trạng thái chấm tự luận từng em ('cần chấm' | 'đã chấm'), em vừa
+  // xem gần nhất (cuộn danh sách về đúng chỗ khi quay lại) và bộ đếm buộc tải
+  // lại trạng thái ngay khi quay về danh sách.
+  const [studentEssayStatus, setStudentEssayStatus] = useState<Record<string, string>>({});
+  // studentId -> id lần làm mới nhất (để nút "Chấm em tiếp theo" mở thẳng bài).
+  const [studentLatestSubId, setStudentLatestSubId] = useState<Record<string, string>>({});
+  const [gradeNextMessage, setGradeNextMessage] = useState('');
+  const [lastViewedStudentId, setLastViewedStudentId] = useState<string | null>(null);
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
   // THÊM MỚI (Lịch sử làm bài): giống hệt state cùng tên trong page.tsx.
   const [historyOpenExamId, setHistoryOpenExamId] = useState<string | null>(null);
   const [historyByExam, setHistoryByExam] = useState<Record<string, AttemptHistoryItem[]>>({});
@@ -1763,15 +1857,21 @@ export default function ClassDetailPanel({
       // page.tsx, đoạn loadLive cùng kiểu sửa): bỏ qua khi tab đang ẩn.
       if (document.hidden) return;
       try {
-        const data = await apiFetch<{ assignments: { studentId: string; status: string }[] }>(
+        const data = await apiFetch<{ assignments: { studentId: string; status: string; essay?: string; submissionId?: string }[] }>(
           `/api/submissions?classId=${classId}`
         );
         if (!cancelled) {
           const map: Record<string, string> = {};
+          const essayMap: Record<string, string> = {};
+          const subMap: Record<string, string> = {};
           data.assignments.forEach((a) => {
             map[a.studentId] = a.status;
+            if (a.essay) essayMap[a.studentId] = a.essay;
+            if (a.submissionId) subMap[a.studentId] = a.submissionId;
           });
           setStudentActivityStatus(map);
+          setStudentEssayStatus(essayMap);
+          setStudentLatestSubId(subMap);
         }
       } catch {
         // Chỉ là badge phụ trên danh sách lớp — lỗi ở đây không cần báo ồn
@@ -1791,7 +1891,25 @@ export default function ClassDetailPanel({
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [classId]);
+  }, [classId, activityRefreshKey]);
+
+  // THÊM MỚI: ghi nhớ em vừa xem; khi quay lại danh sách lớp thì tải lại trạng
+  // thái (để thấy dấu "Đã chấm tự luận") và cuộn thẳng tới đúng em đó.
+  useEffect(() => {
+    if (selectedStudentId) setLastViewedStudentId(selectedStudentId);
+  }, [selectedStudentId]);
+  useEffect(() => {
+    if (selectedStudentId || !lastViewedStudentId) return;
+    const t = setTimeout(() => {
+      document
+        .getElementById(`stu-row-${lastViewedStudentId}`)
+        ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 150);
+    return () => clearTimeout(t);
+  }, [selectedStudentId, lastViewedStudentId]);
+  useEffect(() => {
+    if (!viewingSubmissionId) setActivityRefreshKey((k) => k + 1);
+  }, [viewingSubmissionId]);
 
   useEffect(() => {
     if (selectedStudentId) {
@@ -1803,6 +1921,51 @@ export default function ClassDetailPanel({
   }, [selectedStudentId]);
 
   const selectedStudent = classStudents.find((s) => s._id === selectedStudentId) || null;
+
+  // THÊM MỚI: "Chấm em tiếp theo" — tìm em KẾ TIẾP (theo thứ tự danh sách lớp,
+  // vòng lại từ đầu) còn "Chờ chấm tự luận" rồi mở thẳng bài làm của em đó.
+  // Tải lại trạng thái trước để không nhảy nhầm sang em vừa được chấm xong.
+  async function findNextEssayStudent(): Promise<{ studentId: string; submissionId: string } | null> {
+    let essayMap = studentEssayStatus;
+    let subMap = studentLatestSubId;
+    try {
+      const data = await apiFetch<{ assignments: { studentId: string; essay?: string; submissionId?: string }[] }>(
+        `/api/submissions?classId=${classId}`
+      );
+      essayMap = {};
+      subMap = {};
+      data.assignments.forEach((a) => {
+        if (a.essay) essayMap[a.studentId] = a.essay;
+        if (a.submissionId) subMap[a.studentId] = a.submissionId;
+      });
+      setStudentEssayStatus(essayMap);
+      setStudentLatestSubId(subMap);
+    } catch {
+      // mất mạng -> dùng trạng thái đang có
+    }
+    const ids = classStudents.map((st) => st._id);
+    const currentId = selectedStudentId || lastViewedStudentId || '';
+    const start = ids.indexOf(currentId);
+    for (let k = 1; k <= ids.length; k++) {
+      const cand = ids[(start + k + ids.length) % ids.length];
+      if (cand === currentId) continue;
+      if (essayMap[cand] === 'cần chấm' && subMap[cand]) {
+        return { studentId: cand, submissionId: subMap[cand] };
+      }
+    }
+    return null;
+  }
+  async function handleGradeNext() {
+    setGradeNextMessage('');
+    const next = await findNextEssayStudent();
+    if (!next) {
+      setViewingSubmissionId(null);
+      setGradeNextMessage('Không còn em nào đang chờ chấm tự luận.');
+      return;
+    }
+    setSelectedStudentId(next.studentId);
+    setViewingSubmissionId(next.submissionId);
+  }
   // Tên hiện NGAY từ prop trong lúc chờ fetch xong; sau khi tải được thì ưu
   // tiên tên mới nhất từ server (phòng trường hợp GV vừa đổi tên lớp ở nơi
   // khác trong lúc đang mở panel này).
@@ -1813,6 +1976,7 @@ export default function ClassDetailPanel({
   // khác, tránh phải rời hẳn khỏi lớp rồi vào lại mới thấy tên mới.
   const goClass = () => {
     setSelectedStudentId(null);
+    setActivityRefreshKey((k) => k + 1);
     loadClassStudents(classId);
   };
 
@@ -1967,6 +2131,11 @@ export default function ClassDetailPanel({
           )}
         </div>
 
+        {gradeNextMessage && (
+          <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
+            ✓ {gradeNextMessage}
+          </p>
+        )}
         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Danh sách đề thi đã giao</h3>
         {loadingAssignedExams ? (
           <div className="space-y-2.5">
@@ -2108,8 +2277,10 @@ export default function ClassDetailPanel({
         )}
         {viewingSubmissionId && (
           <SubmissionDetailModal
+            key={viewingSubmissionId}
             submissionId={viewingSubmissionId}
             onClose={() => setViewingSubmissionId(null)}
+            onGradeNext={handleGradeNext}
           />
         )}
       </div>
@@ -2547,6 +2718,25 @@ export default function ClassDetailPanel({
         placeholder="Tìm theo tên..."
         className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm mb-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-shadow"
       />
+      {(() => {
+        const pending = Object.values(studentEssayStatus).filter((v) => v === 'cần chấm').length;
+        if (pending === 0 && !gradeNextMessage) return null;
+        return (
+          <div className="flex items-center justify-between gap-3 mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+            <p className="text-sm text-amber-800">
+              {pending > 0 ? `Còn ${pending} em đang chờ chấm tự luận` : gradeNextMessage}
+            </p>
+            {pending > 0 && (
+              <button
+                onClick={handleGradeNext}
+                className="text-xs font-semibold bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 shrink-0"
+              >
+                Chấm em tiếp theo →
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {loadingDetail ? (
         <div className="space-y-2">
@@ -2581,7 +2771,10 @@ export default function ClassDetailPanel({
             ) : (
               <div
                 key={s._id}
-                className="w-full flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3.5 hover:shadow-md hover:border-blue-200 transition-all"
+                id={`stu-row-${s._id}`}
+                className={`w-full flex items-center gap-3 bg-white border rounded-xl px-4 py-3.5 hover:shadow-md hover:border-blue-200 transition-all ${
+                  lastViewedStudentId === s._id ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200'
+                }`}
               >
                 <button
                   onClick={() => setSelectedStudentId(s._id)}
@@ -2629,7 +2822,19 @@ export default function ClassDetailPanel({
                       </p>
                     )}
                     {studentActivityStatus[s._id] === 'đã nộp' && (
-                      <p className="text-xs text-gray-400 mt-0.5">Đã thi xong</p>
+                      <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                        <span>Đã thi xong</span>
+                        {studentEssayStatus[s._id] === 'đã chấm' && (
+                          <span className="text-[10px] font-semibold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                            ✓ Đã chấm tự luận
+                          </span>
+                        )}
+                        {studentEssayStatus[s._id] === 'cần chấm' && (
+                          <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                            Chờ chấm tự luận
+                          </span>
+                        )}
+                      </p>
                     )}
                   </div>
                 </button>

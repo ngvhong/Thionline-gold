@@ -50,7 +50,11 @@ export const REGISTRATION_APPROVAL_MESSAGE =
 // Thông tin tác giả — hiện cho GV khi hỏi "ai làm ra app này".
 export const APP_AUTHOR = {
   name: 'Nguyễn Văn Hồng',
-  school: 'Trường THPT An Phước',
+  // Đổi công tác (25-10): nay là giáo viên Trường THPT Nguyễn Huệ, trước đây
+  // là giáo viên Trường THPT An Phước. Muốn đổi lại chỉ sửa đúng chỗ này, mọi
+  // nơi khác (trợ lý AI, câu hỏi gợi ý) tự đọc theo.
+  school: 'Trường THPT Nguyễn Huệ',
+  previousSchool: 'Trường THPT An Phước',
   province: 'Tỉnh Khánh Hòa',
 };
 

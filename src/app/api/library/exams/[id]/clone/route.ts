@@ -52,6 +52,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       sharedFolderId: null,
       shareWithTeachers: false,
       openForStudents: false,
+      openForMockExam: false,
     });
 
     return NextResponse.json({ newExamId: String(cloned._id) }, { status: 201 });

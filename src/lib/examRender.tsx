@@ -112,6 +112,18 @@ function localToRootBBox(
   let ctm: DOMMatrix | null = null;
   try {
     ctm = (el as unknown as SVGGraphicsElement).getCTM();
+    // SỬA LỖI GỐC (4-11, "mất khúc trên hình cột cờ + MỌI bảng biến thiên lớp 12
+    // bị lẹm đầu hình"): getCTM() của phần tử là ma trận phần tử -> VIEWPORT,
+    // đã CỘNG SẴN phép tịnh tiến của viewBox. SVG do dvisvgm xuất thường có
+    // viewBox bắt đầu ở số ÂM (vd "-72 -72 W H"), nên bbox "nhìn thấy" bị lệch
+    // đúng 72 đơn vị so với `bbox` của getBBox() trên <svg> (vốn ở toạ độ
+    // viewBox) -> extraTop thành ~72 (> ngưỡng 30) -> cắt oan ~56 đơn vị phía
+    // trên. SỬA: nhân thêm nghịch đảo CTM của <svg> gốc để đưa về ĐÚNG hệ toạ
+    // độ viewBox (cả tịnh tiến lẫn tỉ lệ), thay vì chỉ chia rootScale.
+    const rootEl = (el as unknown as SVGGraphicsElement).ownerSVGElement;
+    const rootCtm = rootEl ? (rootEl as unknown as SVGGraphicsElement).getCTM() : null;
+    if (ctm && rootCtm) ctm = rootCtm.inverse().multiply(ctm);
+    else ctm = null;
   } catch {
     ctm = null;
   }
@@ -122,8 +134,8 @@ function localToRootBBox(
     { x: bb.x, y: bb.y + bb.height },
     { x: bb.x + bb.width, y: bb.y + bb.height },
   ].map((p) => ({
-    x: (ctm!.a * p.x + ctm!.c * p.y + ctm!.e) / rootScale,
-    y: (ctm!.b * p.x + ctm!.d * p.y + ctm!.f) / rootScale,
+    x: ctm!.a * p.x + ctm!.c * p.y + ctm!.e,
+    y: ctm!.b * p.x + ctm!.d * p.y + ctm!.f,
   }));
   const xs = corners.map((c) => c.x);
   const ys = corners.map((c) => c.y);
@@ -402,6 +414,13 @@ export function TikzImage({
       .replace(/url\(#/g, `url(#${prefix}`);
   }, [svg, figId]);
 
+  // SỬA LỖI GỐC (28-7: "bảng biến thiên mất đường kẻ trên/dưới, hình cao bị khuất
+  // đầu/cuối"): React 19 so sánh prop dangerouslySetInnerHTML theo ĐỊNH DANH
+  // object — viết {{ __html }} inline tạo object MỚI mỗi lần render nên mỗi lần
+  // setBase() làm render lại, React ghi đè innerHTML bằng SVG GỐC và xoá sạch
+  // viewBox đã cắt/đo. Giữ cùng 1 object bằng useMemo để SVG đã cắt không bị ghi đè.
+  const svgHtmlProp = useMemo(() => ({ __html: namespacedSvg }), [namespacedSvg]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -418,10 +437,10 @@ export function TikzImage({
         const bbox = (svgEl as unknown as SVGGraphicsElement).getBBox();
         // GHI CHÚ: "padding" này KHÔNG phải margin CSS — cộng thẳng vào
         // viewBox của SVG (nằm sẵn TRONG hình).
-        const BASE_PADDING = 0.5;
+        const BASE_PADDING = 2; // 28-7: 0.5 -> 2 (khung bảng biến thiên mất đường kẻ trên/dưới)
         if (bbox.width > 0 && bbox.height > 0) {
-          const LARGE_GAP_THRESHOLD_PX = 10;
-          const SAFE_MARGIN_PX = 5;
+          const LARGE_GAP_THRESHOLD_PX = 30;
+          const SAFE_MARGIN_PX = 14; // hình cao bị khuất đầu/cuối: nới biên an toàn
           let vTop = bbox.y;
           let vBottom = bbox.y + bbox.height;
           const visible = getVisibleContentBBox(svgEl as unknown as SVGSVGElement);
@@ -565,7 +584,7 @@ export function TikzImage({
       <div
         ref={containerRef}
         className="tikz-svg-wrap w-full flex justify-center overflow-x-auto"
-        dangerouslySetInnerHTML={{ __html: namespacedSvg }}
+        dangerouslySetInnerHTML={svgHtmlProp}
       />
     </>
   );

@@ -43,7 +43,9 @@ export async function GET(
     // cao nhất trong các lần đã nộp). Giá trị lạ/không hợp lệ -> coi như
     // 'latest', không chặn cả request chỉ vì tham số phụ này sai.
     const scoreModeParam = request.nextUrl.searchParams.get('scoreMode');
-    const scoreMode: 'latest' | 'highest' = scoreModeParam === 'highest' ? 'highest' : 'latest';
+    // Mặc định 'auto' = theo cài đặt Cách tính điểm của từng đề (mặc định đề: điểm cao nhất).
+    const scoreMode: 'auto' | 'latest' | 'highest' =
+      scoreModeParam === 'highest' ? 'highest' : scoreModeParam === 'latest' ? 'latest' : 'auto';
 
     await connectToDatabase();
 
@@ -79,7 +81,7 @@ export async function GET(
     const dateTag = new Date().toISOString().slice(0, 10);
     // Gắn hậu tố vào tên file khi xuất theo điểm cao nhất, để GV phân biệt
     // được file nào tính kiểu gì nếu tải cả 2 bản để đối chiếu.
-    const modeTag = scoreMode === 'highest' ? '_DiemCaoNhat' : '';
+    const modeTag = scoreMode === 'highest' ? '_DiemCaoNhat' : scoreMode === 'latest' ? '_DiemLanCuoi' : '';
 
     // Bọc tường minh bằng Uint8Array để qua kiểm tra kiểu BodyInit (tsc), không
     // đổi hành vi byte nào.

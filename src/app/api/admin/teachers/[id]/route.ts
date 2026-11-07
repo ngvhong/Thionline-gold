@@ -4,6 +4,10 @@ import { TeacherModel } from '@/lib/teacherModel';
 import { requireAdmin } from '@/lib/adminGuard';
 import { AdminAuditLogModel } from '@/lib/adminAuditLogModel';
 import { computePlanStatus } from '@/lib/planAccess';
+import { isAdminEmail } from '@/lib/adminConfig';
+import { deleteTeacherAndAllData } from '@/lib/deleteTeacherData';
+import { ClassModel } from '@/lib/classModel';
+import { Exam } from '@/lib/examModel';
 
 // PATCH /api/admin/teachers/[id] — hỗ trợ 2 loại thao tác, phân biệt bằng
 // field có mặt trong body:
@@ -162,6 +166,77 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     console.error('Lỗi cập nhật tài khoản (admin):', err);
     return NextResponse.json(
       { error: 'Không cập nhật được tài khoản này, xem chi tiết ở server log.' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/admin/teachers/[id] — admin XÓA VĨNH VIỄN tài khoản GV cùng toàn
+// bộ lớp, học sinh trong lớp, đề thi, bài nộp, ảnh bài làm của GV đó. KHÔNG
+// thể hoàn tác (khác "Khoá": khoá vẫn giữ nguyên dữ liệu, chỉ chặn đăng nhập).
+//
+// An toàn:
+//  - Chỉ admin (requireAdmin tra lại email thật từ DB theo session).
+//  - Không cho tự xóa chính mình, không cho xóa tài khoản quản trị.
+//  - Body BẮT BUỘC có `confirmEmail` khớp email tài khoản bị xóa — chống bấm
+//    nhầm / gọi API bừa (UI cũng bắt admin gõ lại email trước khi gửi).
+//  - Ghi nhật ký SAU khi xóa thành công (snapshot email, vì tài khoản đã mất).
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const admin = await requireAdmin(request);
+    if (!admin) {
+      return NextResponse.json({ error: 'Bạn không có quyền thực hiện thao tác này.' }, { status: 403 });
+    }
+
+    const { id } = await params;
+    if (String(admin._id) === String(id)) {
+      return NextResponse.json(
+        { error: 'Không thể tự xóa chính tài khoản quản trị đang dùng.' },
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const confirmEmail = typeof body.confirmEmail === 'string' ? body.confirmEmail.trim().toLowerCase() : '';
+
+    await connectToDatabase();
+    const teacher: any = await TeacherModel.findById(id).lean();
+    if (!teacher) {
+      return NextResponse.json({ error: 'Không tìm thấy tài khoản này.' }, { status: 404 });
+    }
+    if (teacher.role === 'admin' || isAdminEmail(teacher.email)) {
+      return NextResponse.json({ error: 'Không thể xóa tài khoản quản trị.' }, { status: 403 });
+    }
+    if (!confirmEmail || confirmEmail !== String(teacher.email).trim().toLowerCase()) {
+      return NextResponse.json(
+        { error: 'Email xác nhận không khớp — chưa xóa gì cả.' },
+        { status: 400 }
+      );
+    }
+
+    // Đếm trước để ghi vào nhật ký (sau khi xóa sẽ không đếm lại được).
+    const [classCount, examCount] = await Promise.all([
+      ClassModel.countDocuments({ ownerId: teacher._id }),
+      Exam.countDocuments({ teacherId: String(teacher._id) }),
+    ]);
+
+    await deleteTeacherAndAllData(teacher);
+
+    // Await có chủ đích (khác khoá/mở): xóa vĩnh viễn nên muốn chắc chắn có
+    // dấu vết; lỗi ghi log vẫn không làm hỏng kết quả xóa đã xong.
+    await AdminAuditLogModel.create({
+      adminEmail: admin.email,
+      action: 'delete_teacher',
+      targetTeacherId: String(id),
+      targetEmail: teacher.email,
+      detail: `Xóa vĩnh viễn tài khoản (${classCount} lớp, ${examCount} đề thi)`,
+    }).catch((err: any) => console.error('Lỗi ghi audit log:', err));
+
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (err) {
+    console.error('Lỗi xóa tài khoản GV (admin):', err);
+    return NextResponse.json(
+      { error: 'Không xóa được tài khoản này, xem chi tiết ở server log. Có thể bấm xóa lại.' },
       { status: 500 }
     );
   }

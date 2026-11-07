@@ -42,6 +42,10 @@ const ExamSchema = new mongoose.Schema({
   // khu vực "Ôn luyện". Giai đoạn 3 CHƯA có route/UI nào đọc field này để
   // cho học sinh làm bài thật — chỉ hiện sẵn checkbox trong popup chia sẻ.
   openForStudents: { type: Boolean, default: false },
+  // THÊM MỚI (25-10): 2 chế độ chia sẻ cho HỌC SINH tách riêng — openForStudents = tab
+  // "Ôn luyện" (tương tác, khóa lời giải từng câu, lưu tiến độ); openForMockExam = tab
+  // "Thi thử" (làm như thi thật: bấm giờ, nộp 1 lần). GV bật 1 trong 2 hoặc cả 2.
+  openForMockExam: { type: Boolean, default: false },
 });
 
 export const Exam = mongoose.models.Exam || mongoose.model('Exam', ExamSchema);

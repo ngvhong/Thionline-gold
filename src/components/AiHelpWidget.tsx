@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { SimpleMarkdown } from './SimpleMarkdown';
 import { ADMIN_CONTACT, APP_AUTHOR } from '@/lib/adminConfig';
 
 type ChatImage = { mimeType: string; data: string; previewUrl: string };
@@ -51,7 +52,7 @@ function PaperclipIcon({ className }: { className?: string }) {
 
 const WELCOME_MESSAGE: ChatMessage = {
   role: 'model',
-  content: 'Chào Thầy/Cô 👋 Em là trợ lý AI của app. Thầy/Cô bấm 1 câu hỏi gợi ý bên dưới để có trả lời ngay, hoặc gõ câu hỏi khác để em trả lời trực tiếp nhé.',
+  content: 'Chào Thầy/Cô, em là trợ lý AI của app. Thầy/Cô bấm 1 câu hỏi gợi ý bên dưới để có trả lời ngay, hoặc gõ câu hỏi khác để em trả lời trực tiếp nhé.',
 };
 
 // THÊM MỚI: câu hỏi thường gặp + câu trả lời SOẠN SẴN — bấm là hiện ngay,
@@ -73,17 +74,17 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
   {
     question: 'Quy trình tạo đề & giao bài (tóm tắt nhanh)',
     answer:
-      '🏫 Tạo lớp (tab "Quản lí Khối-lớp", thêm học sinh vào lớp) → 📄 Soạn/tải đề (.tex hoặc dán nội dung) → 🔍 Xem đề, sửa lỗi soát đề → 🚀 Xuất bản - Lấy link → 👥 Giao đề cho lớp/khối → ✅ Học sinh vào thi bằng link được giao.\n\nChi tiết hơn ở từng bước, Thầy/Cô gõ câu hỏi hỏi em nhé!',
+      'Tạo lớp (tab "Quản lí Khối-lớp", thêm học sinh vào lớp) → Soạn/tải đề (.tex hoặc dán nội dung) → Xem đề, sửa lỗi soát đề → Xuất bản - Lấy link → Giao đề cho lớp/khối → Học sinh vào thi bằng link được giao.\n\nChi tiết hơn ở từng bước, Thầy/Cô gõ câu hỏi hỏi em nhé!',
   },
   {
     question: 'Quy trình cài đặt đề thi (tóm tắt nhanh)',
     answer:
-      '⏱ Thời gian làm bài → 🔁 Số lần được làm → 🕐 Giờ mở/đóng đề → 🔀 Trộn câu hỏi/đáp án (tuỳ chọn) → 👁 Khi nào học sinh xem lời giải (ngay khi nộp / ẩn hoàn toàn / tự mở khi cả lớp thi xong / GV tự đặt giờ).\n\nChi tiết hơn từng mục, Thầy/Cô gõ câu hỏi hỏi em nhé!',
+      'Thời gian làm bài → Số lần được làm → Giờ mở/đóng đề → Trộn câu hỏi/đáp án (tuỳ chọn) → Khi nào học sinh xem lời giải (ngay khi nộp / ẩn hoàn toàn / tự mở khi cả lớp thi xong / GV tự đặt giờ).\n\nChi tiết hơn từng mục, Thầy/Cô gõ câu hỏi hỏi em nhé!',
   },
   {
     question: 'Quy trình chấm tự luận (Phần IV) (tóm tắt nhanh)',
     answer:
-      '📷 Học sinh chụp ảnh bài làm nộp lên → 👁 Thầy/Cô mở modal "Xem bài làm" xem ảnh → 🖊 Khoanh/gạch chân bằng bút đỏ ngay trên ảnh nếu cần (không sửa ảnh gốc) → 📝 Nhập điểm từng câu Tự luận → 💾 Lưu — điểm Phần IV cộng riêng, không tự động chấm.\n\nChi tiết hơn, Thầy/Cô gõ câu hỏi hỏi em nhé!',
+      'Học sinh chụp ảnh bài làm nộp lên → Thầy/Cô mở modal "Xem bài làm" xem ảnh → Khoanh/gạch chân bằng bút đỏ ngay trên ảnh nếu cần (không sửa ảnh gốc) → Nhập điểm từng câu Tự luận → Lưu — điểm Phần IV cộng riêng, không tự động chấm.\n\nChi tiết hơn, Thầy/Cô gõ câu hỏi hỏi em nhé!',
   },
   {
     question: 'Tôi đã có nguồn đề LaTeX (iMath/xtex/iTex) thì dùng thế nào?',
@@ -92,11 +93,11 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
   },
   {
     question: 'Tác giả app là ai? Liên hệ hỗ trợ ở đâu?',
-    answer: `App do Thầy ${APP_AUTHOR.name}, giáo viên ${APP_AUTHOR.school} (${APP_AUTHOR.province}) phát triển. Thầy/Cô liên hệ hỗ trợ qua Messenger Facebook (${ADMIN_CONTACT.facebook}) hoặc email ${ADMIN_CONTACT.email} nhé.`,
+    answer: `App do Thầy ${APP_AUTHOR.name} phát triển. Hiện Thầy là giáo viên ${APP_AUTHOR.school} (${APP_AUTHOR.province}), trước đây công tác tại ${APP_AUTHOR.previousSchool}. Thầy/Cô liên hệ hỗ trợ qua Messenger Facebook (${ADMIN_CONTACT.facebook}) hoặc email ${ADMIN_CONTACT.email} nhé.`,
   },
   {
-    question: 'App miễn phí bao lâu, vì sao có thời hạn?',
-    answer: `Vì app đang dùng máy chủ miễn phí nên mọi tài khoản đều là tài khoản dùng thử có thời hạn, tránh máy chủ quá tải khiến app bị sập/đóng.`,
+    question: 'App miễn phí không? Có giới hạn thời gian dùng không?',
+    answer: `App miễn phí hoàn toàn cho cả giáo viên và học sinh, không có thời hạn dùng thử và không cần gia hạn.`,
   },
 ];
 
@@ -265,7 +266,7 @@ export function AiHelpWidget() {
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed break-words ${m.role === 'user' ? 'whitespace-pre-wrap' : ''} ${
                     m.role === 'user'
                       ? 'bg-blue-600 text-white rounded-br-sm'
                       : 'bg-white text-gray-800 border border-gray-200 rounded-bl-sm'
@@ -278,7 +279,7 @@ export function AiHelpWidget() {
                       className="max-h-32 rounded-lg mb-1.5 border border-white/30"
                     />
                   )}
-                  {m.content}
+                  {m.role === 'model' ? <SimpleMarkdown text={m.content} /> : m.content}
                 </div>
               </div>
             ))}

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { maybeRunDailyCleanup } from '@/lib/autoCleanup';
 import { connectToDatabase } from '@/lib/mongodb';
 import { TeacherModel } from '@/lib/teacherModel';
 import {
@@ -39,6 +40,8 @@ export async function POST(request: NextRequest) {
     }
 
     await connectToDatabase();
+    // Dọn dữ liệu an toàn tối đa 1 lần/ngày (chạy nền, không chặn đăng nhập).
+    void maybeRunDailyCleanup().catch(() => {});
 
     const normalizedEmail = String(email).trim().toLowerCase();
     const teacher = await TeacherModel.findOne({ email: normalizedEmail });

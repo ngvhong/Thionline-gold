@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppLogoIcon, APP_NAME } from '@/components/AppBranding';
 import { setPortalChoice, clearPortalChoice } from '@/lib/portalChoice';
+import GuideVideoButton from '@/components/GuideVideoButton';
 // THÊM MỚI (Giai đoạn 2 — tab "Đề được giao"): nội dung thật, thay khung
 // rỗng cũ — xem AssignedExamsTab.tsx.
 import AssignedExamsTab from './AssignedExamsTab';
@@ -325,11 +326,11 @@ function StudentHome({
   // xong từ luồng "bấm đề lúc chưa đăng nhập" (cần quay lại đúng tab "Ôn
   // luyện", không phải tab mặc định "Đề được giao"). undefined = giữ hành
   // vi mặc định cũ (luôn mở "assigned").
-  initialTab?: 'assigned' | 'library';
+  initialTab?: 'assigned' | 'mock' | 'library';
   autoStartExamId?: string | null;
   onAutoStartConsumed?: () => void;
 }) {
-  const [tab, setTab] = useState<'assigned' | 'library'>(initialTab || 'assigned');
+  const [tab, setTab] = useState<'assigned' | 'mock' | 'library'>(initialTab || 'assigned');
   // SỬA (HS báo: vào lớp xong, tab "Đề được giao" vẫn trống): AssignedExamsTab chỉ
   // tải danh sách 1 lần lúc mount, nên sau "Vào thêm lớp" nó vẫn giữ danh sách
   // cũ (rỗng) tới khi F5. Tăng key này để ép tab tải lại ngay sau khi vào lớp.
@@ -345,8 +346,8 @@ function StudentHome({
   }
 
   return (
-    <div className="w-full max-w-md text-left">
-      <div className="flex items-center justify-between mb-4">
+    <div className="w-full text-left">
+      <div className="flex items-center justify-between mb-3">
         <div>
           <p className="font-semibold text-gray-800">{account.name}</p>
           <p className="text-xs text-gray-400">{account.phone}</p>
@@ -354,7 +355,7 @@ function StudentHome({
         <button
           type="button"
           onClick={handleLogout}
-          className="text-xs text-gray-500 hover:text-red-600 border border-gray-300 hover:border-red-300 rounded-lg px-3 py-1.5"
+          className="text-sm text-gray-500 hover:text-red-600 border border-gray-300 hover:border-red-300 rounded-lg px-4 py-2.5"
         >
           Đăng xuất
         </button>
@@ -364,7 +365,7 @@ function StudentHome({
         <button
           type="button"
           onClick={() => setTab('assigned')}
-          className={`flex-1 py-1.5 rounded-md transition-colors ${
+          className={`flex-1 py-2.5 rounded-md transition-colors ${
             tab === 'assigned' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'
           }`}
         >
@@ -372,8 +373,17 @@ function StudentHome({
         </button>
         <button
           type="button"
+          onClick={() => setTab('mock')}
+          className={`flex-1 py-2.5 rounded-md transition-colors ${
+            tab === 'mock' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'
+          }`}
+        >
+          Thi thử
+        </button>
+        <button
+          type="button"
           onClick={() => setTab('library')}
-          className={`flex-1 py-1.5 rounded-md transition-colors ${
+          className={`flex-1 py-2.5 rounded-md transition-colors ${
             tab === 'library' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'
           }`}
         >
@@ -385,6 +395,8 @@ function StudentHome({
         <AssignedExamsTab key={assignedReloadKey} />
       ) : (
         <LibraryPracticeTab
+          key={tab}
+          mode={tab === 'mock' ? 'mock' : 'practice'}
           isLoggedIn={true}
           onRequestAuth={() => {
             /* THÊM MỚI (Giai đoạn 4): đã đăng nhập rồi thì không bao giờ gọi
@@ -458,7 +470,7 @@ function GuestHome({ onRequestAuth, onWantLogin }: { onRequestAuth: (examId: str
           Đăng nhập
         </button>
       </div>
-      <LibraryPracticeTab isLoggedIn={false} onRequestAuth={onRequestAuth} />
+      <LibraryPracticeTab mode="practice" isLoggedIn={false} onRequestAuth={onRequestAuth} />
     </div>
   );
 }
@@ -493,13 +505,33 @@ export default function StudentApp() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm bg-white border border-gray-200 rounded-xl shadow-sm p-7 text-center">
-        <p className="flex items-center justify-center gap-2.5 font-bold text-blue-600 text-2xl tracking-tight mb-1">
-          <AppLogoIcon className="w-10 h-10 shrink-0" />
-          {APP_NAME}
-        </p>
-        <p className="text-sm text-gray-400 mb-6">Cổng học sinh</p>
+    <div className={`min-h-screen bg-gray-50 flex justify-center p-3 sm:p-4 ${account ? 'items-start' : 'items-center'}`}>
+      <div
+        className={`w-full bg-white border border-gray-200 rounded-xl shadow-sm text-center ${
+          account ? 'max-w-md md:max-w-2xl p-4 sm:p-6 sm:mt-6' : 'max-w-sm p-7'
+        }`}
+      >
+        {/* 25-10: khi đã đăng nhập, đầu trang gọn 1 hàng (logo + tên + "Cổng học sinh")
+            để nhường chỗ cho danh sách đề; chưa đăng nhập giữ bố cục cũ. */}
+        {account ? (
+          <p className="flex items-center gap-2 font-bold text-blue-600 text-lg tracking-tight mb-3 text-left">
+            <AppLogoIcon className="w-8 h-8 shrink-0" />
+            {APP_NAME}
+            <span className="text-xs font-normal text-gray-400">· Cổng học sinh</span>
+            <GuideVideoButton role="student" variant="icon" className="ml-auto" />
+          </p>
+        ) : (
+          <>
+            <p className="flex items-center justify-center gap-2.5 font-bold text-blue-600 text-2xl tracking-tight mb-1">
+              <AppLogoIcon className="w-10 h-10 shrink-0" />
+              {APP_NAME}
+            </p>
+            <p className="text-sm text-gray-400 mb-3">Cổng học sinh</p>
+            <div className="flex justify-center mb-5">
+              <GuideVideoButton role="student" />
+            </div>
+          </>
+        )}
 
         {checking ? (
           <p className="text-sm text-gray-400 py-6">Đang kiểm tra phiên đăng nhập…</p>
@@ -529,7 +561,7 @@ export default function StudentApp() {
             clearPortalChoice();
             router.push('/login');
           }}
-          className="text-xs font-medium text-gray-500 hover:text-gray-900 underline underline-offset-2 mt-5"
+          className="text-sm font-medium text-black hover:text-blue-700 underline underline-offset-2 mt-5"
         >
           Không phải bạn? Đổi vai trò
         </button>

@@ -33,6 +33,11 @@ const AppSettingsSchema = new mongoose.Schema({
   //   - 'closed': tạm KHÔNG nhận đăng ký mới nào — trả lỗi ngay ở bước gửi
   //     form, kèm banner giải thích lý do (hạ tầng), không tạo tài khoản.
   registrationMode: { type: String, enum: ['open', 'approval', 'closed'], default: 'open' },
+  // THÊM MỚI (25-10): có BẮT BUỘC xác nhận email mới dùng được app hay không.
+  // Mặc định false (không bắt buộc) — đăng ký xong dùng ngay, đỡ vướng cho GV
+  // dùng điện thoại (phải chuyển qua app Mail rồi quay lại). Admin bật lại ở
+  // tab Quản trị > Cấu hình. Xem getRequireEmailVerification trong appSettings.ts.
+  requireEmailVerification: { type: Boolean, default: false },
   updated_at: { type: Date, default: Date.now },
 });
 

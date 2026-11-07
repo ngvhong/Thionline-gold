@@ -11,6 +11,7 @@ import { REGISTRATION_CLOSED_MESSAGE, REGISTRATION_APPROVAL_MESSAGE } from '@/li
 // đó) — nên chỉ cần chặn/rẽ nhánh đúng 1 chỗ này là đủ, không phải sửa
 // page.tsx.
 import PortalChoice from '@/components/PortalChoice';
+import GuideVideoButton from '@/components/GuideVideoButton';
 import { getPortalChoice, clearPortalChoice, type PortalChoiceValue } from '@/lib/portalChoice';
 
 export default function LoginPage() {
@@ -181,9 +182,12 @@ export default function LoginPage() {
           <AppLogoIcon className="w-10 h-10 shrink-0" />
           {APP_NAME}
         </p>
-        <p className="text-sm text-gray-400 text-center mb-6">
+        <p className="text-sm text-gray-400 text-center mb-3">
           {mode === 'login' ? 'Đăng nhập vào tài khoản giáo viên' : 'Tạo tài khoản giáo viên mới'}
         </p>
+        <div className="flex justify-center mb-5">
+          <GuideVideoButton role="teacher" />
+        </div>
 
         {/* THÊM MỚI: thông báo vừa đăng ký xong ở chế độ 'approval' — hiện
             trên cả màn hình đăng nhập, không tự mất khi đổi qua lại 2 tab
@@ -300,14 +304,14 @@ export default function LoginPage() {
             ở lớp...) lỡ set nhầm cookie last_portal_choice = 'teacher' —
             cho phép quay lại bảng chọn vai trò mà không cần xoá cookie thủ
             công. Không đăng xuất ai cả, chỉ xoá "trí nhớ" lựa chọn. */}
-        <p className="text-xs text-gray-300 text-center mt-4">
+        <p className="text-sm font-medium text-black text-center mt-4">
           <button
             type="button"
             onClick={() => {
               clearPortalChoice();
               setPortalChoiceState(null);
             }}
-            className="hover:underline hover:text-gray-500"
+            className="underline underline-offset-2 hover:text-blue-700"
           >
             Không phải bạn? Đổi vai trò
           </button>

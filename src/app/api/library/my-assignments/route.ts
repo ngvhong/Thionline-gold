@@ -10,6 +10,7 @@ import { ExamAssignmentModel } from '@/lib/examAssignmentModel';
 import { getVerifiedStudentAccountIdFromRequest } from '@/lib/studentAuth';
 import { expireOverdueSubmissions } from '@/lib/expireOverdueSubmissions';
 import { resolveEffectiveSettings, canSelfRetake } from '@/lib/examAccessRules';
+import { pickRepresentativeAttempt, resolveScoreMode } from '@/lib/scoreMode';
 
 // THÊM MỚI (Giai đoạn 2 — tab "Đề được giao", xem
 // docs-moi/01-KE-HOACH-CHI-TIET.md): route MỚI HOÀN TOÀN, không sửa route
@@ -66,6 +67,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ assignments: [] }, { status: 200 });
     }
 
+    // Điểm hiển thị: theo Cách tính điểm của đề (mặc định CAO NHẤT trong các lần
+    // đã nộp). Trạng thái/attemptNumber/canRetake vẫn theo lần MỚI NHẤT như cũ.
+    // Chỉ kéo các trường nhẹ (không answers/ảnh) để so điểm.
+    const submittedAttempts = await SubmissionModel.find(
+      { studentId: { $in: studentObjectIds }, status: 'đã nộp' },
+      { studentId: 1, examId: 1, status: 1, attemptNumber: 1, score: 1, total: 1, scorePoints: 1, maxScorePoints: 1, essayGraded: 1, essayScores: 1, essayMaxScore: 1 }
+    ).lean();
+    const submittedByPair = new Map<string, any[]>();
+    submittedAttempts.forEach((a: any) => {
+      const k = `${String(a.studentId)}_${String(a.examId)}`;
+      const arr = submittedByPair.get(k) || [];
+      arr.push(a);
+      submittedByPair.set(k, arr);
+    });
+
     const examIds = [...new Set(latestPerExam.map((s: any) => String(s.examId)))];
     const classIds = [...new Set(rosterRows.map((r: any) => String(r.classId)))];
 
@@ -103,6 +119,12 @@ export async function GET(request: NextRequest) {
         const effectiveSettings = resolveEffectiveSettings(exam.settings, assignment as any);
 
         const done = s.status === 'đã nộp';
+        // r = lần làm dùng để HIỆN ĐIỂM (cao nhất hoặc mới nhất tuỳ cài đặt đề).
+        const pairAttempts = submittedByPair.get(`${rosterStudentId}_${examId}`) || [];
+        const r: any =
+          done && pairAttempts.length > 0
+            ? pickRepresentativeAttempt(pairAttempts, resolveScoreMode(effectiveSettings))
+            : s;
         const closeAtMs = effectiveSettings.closeAt ? new Date(effectiveSettings.closeAt).getTime() : null;
         const openAtMs = effectiveSettings.openAt ? new Date(effectiveSettings.openAt).getTime() : null;
 
@@ -122,10 +144,18 @@ export async function GET(request: NextRequest) {
           isNotYetOpen: !!(openAtMs && now < openAtMs),
           isClosed: !!(closeAtMs && now > closeAtMs),
           status: done ? 'done' : 'not_done',
-          score: done ? s.score ?? null : null,
-          total: done ? s.total ?? null : null,
-          scorePoints: done ? s.scorePoints ?? null : null,
-          maxScorePoints: done ? s.maxScorePoints ?? null : null,
+          score: done ? r.score ?? null : null,
+          total: done ? r.total ?? null : null,
+          scorePoints: done ? r.scorePoints ?? null : null,
+          maxScorePoints: done ? r.maxScorePoints ?? null : null,
+          // Trạng thái chấm tự luận (nếu đề có Phần IV): để HS biết "chờ chấm"/"đã chấm".
+          essayState:
+            done && (r.essayMaxScore ?? 0) > 0 ? (r.essayGraded ? 'graded' : 'pending') : 'none',
+          essayScoreSum:
+            done && r.essayGraded
+              ? Math.round(Object.values(r.essayScores || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0) * 100) / 100
+              : 0,
+          essayMax: done && (r.essayMaxScore ?? 0) > 0 ? r.essayMaxScore : 0,
           attemptNumber: s.attemptNumber,
           canRetake: done ? canSelfRetake(effectiveSettings, s.attemptNumber) : false,
           assignedAt: s.assigned_at || null,

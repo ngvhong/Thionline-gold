@@ -1,23 +1,63 @@
-<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Thionline logo">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="82 82 860 860" role="img" aria-label="Thionline-ap logo">
   <defs>
-    <linearGradient id="silverSym" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f7f8fa"/>
-      <stop offset="18%" stop-color="#c7cad1"/>
-      <stop offset="38%" stop-color="#eef0f3"/>
-      <stop offset="55%" stop-color="#9a9ea7"/>
-      <stop offset="74%" stop-color="#dcdee2"/>
-      <stop offset="100%" stop-color="#aeb2ba"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#087BFF"/>
+      <stop offset="0.55" stop-color="#0648E8"/>
+      <stop offset="1" stop-color="#092CB8"/>
     </linearGradient>
-    <linearGradient id="goldSymSq" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fff2b0"/>
-      <stop offset="20%" stop-color="#f0c02e"/>
-      <stop offset="40%" stop-color="#8a5a10"/>
-      <stop offset="55%" stop-color="#f7dc6f"/>
-      <stop offset="75%" stop-color="#a06a12"/>
-      <stop offset="100%" stop-color="#f4d878"/>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00E7F5"/>
+      <stop offset="1" stop-color="#13A9FF"/>
+    </linearGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DDF5FF"/>
     </linearGradient>
   </defs>
-  <rect x="7" y="7" width="86" height="86" rx="10" fill="none" stroke="url(#silverSym)" stroke-width="3.2"/>
-  <path d="M54.28 32.36 L19 32.36 L39.16 50 L19 67.64 L54.28 67.64" fill="none" stroke="url(#goldSymSq)" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M50.76 52.52 L61.84 63.61 L81 35.89" fill="none" stroke="#3aa63a" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Rounded app tile; 8% clear margin for adaptive icon cropping -->
+  <rect x="82" y="82" width="860" height="860" rx="190" fill="url(#bg)"/>
+
+  <!-- Orbital stroke behind the symbol -->
+  <path d="M300 595 C355 500 465 448 620 394 C712 361 764 309 770 253"
+        fill="none" stroke="url(#cyan)" stroke-width="42" stroke-linecap="round"/>
+  <path d="M760 282 C748 433 614 562 405 623 C322 648 260 634 235 592 C208 546 249 482 331 430"
+        fill="none" stroke="url(#cyan)" stroke-width="36" stroke-linecap="round"/>
+  <circle cx="770" cy="248" r="49" fill="url(#cyan)"/>
+  <circle cx="770" cy="248" r="27" fill="#FFFFFF"/>
+
+  <!-- Bold Sigma -->
+  <path d="M347 276 H651
+           Q671 276 671 297 V318
+           Q671 338 650 338 H456
+           L548 436
+           Q565 454 548 472 L456 568
+           H629
+           Q651 568 651 590 V608
+           Q651 630 629 630 H347
+           Q320 630 320 604
+           Q320 590 333 576 L443 455
+           L333 335
+           Q320 321 320 305
+           Q320 276 347 276 Z"
+        fill="#FFFFFF"/>
+
+  <!-- Open book, thick simplified pages -->
+  <path d="M214 650
+           C315 675 420 712 512 804
+           C594 715 701 675 810 645
+           L842 719
+           C724 749 612 796 526 874
+           Q512 887 498 874
+           C414 796 303 758 184 735 Z"
+        fill="url(#page)"/>
+  <path d="M181 754
+           C303 775 416 811 512 895
+           C608 811 721 775 843 754
+           L861 802
+           C724 827 611 866 531 923
+           Q512 937 493 923
+           C413 866 300 827 163 802 Z"
+        fill="url(#cyan)"/>
+  <path d="M512 804 V895" fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>
 </svg>

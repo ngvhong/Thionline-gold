@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { maybeRunDailyCleanup } from '@/lib/autoCleanup';
 import { connectToDatabase } from '@/lib/mongodb';
 import { StudentAccountModel } from '@/lib/studentAccountModel';
 import {
@@ -36,6 +37,8 @@ export async function POST(request: NextRequest) {
     }
 
     await connectToDatabase();
+    // Dọn dữ liệu an toàn tối đa 1 lần/ngày (chạy nền, không chặn đăng nhập).
+    void maybeRunDailyCleanup().catch(() => {});
 
     const normalizedPhone = normalizePhone(phone);
     const account = await StudentAccountModel.findOne({ phone: normalizedPhone });

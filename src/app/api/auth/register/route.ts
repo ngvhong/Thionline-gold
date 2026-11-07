@@ -11,7 +11,7 @@ import {
   VERIFY_TOKEN_TTL_HOURS,
 } from '@/lib/auth';
 import { checkRateLimit, getClientIp, formatRetryAfter } from '@/lib/rateLimit';
-import { getFreeTrialDays, getRegistrationMode } from '@/lib/appSettings';
+import { getRegistrationMode, getRequireEmailVerification } from '@/lib/appSettings';
 import { sendVerificationEmail } from '@/lib/sendEmail';
 import { REGISTRATION_CLOSED_MESSAGE, REGISTRATION_APPROVAL_MESSAGE } from '@/lib/adminConfig';
 import { getAppUrl } from '@/lib/appUrl';
@@ -87,13 +87,15 @@ export async function POST(request: NextRequest) {
     // trang Quản trị, xem getFreeTrialDays trong appSettings.ts) thay vì
     // hằng số cứng FREE_TRIAL_DAYS — hàm này tự fallback về hằng số đó nếu
     // admin chưa từng vào đổi, nên không cần lo tài khoản mới bị thiếu hạn.
-    const freeTrialDays = await getFreeTrialDays();
-    const freeExpiresAt = new Date(Date.now() + freeTrialDays * 24 * 60 * 60 * 1000);
+    // (25-10) Bỏ dùng thử 30 ngày: không còn tính freeExpiresAt cho tài khoản mới.
 
     // THÊM MỚI (xác nhận email): tạo token xác nhận NGAY lúc đăng ký, lưu
     // hash + hạn 24 giờ vào cùng document luôn (đỡ phải save() thêm 1 lần) —
     // emailVerified set thẳng false ở đây, ĐÈ lên default=true của schema
     // (default=true chỉ để không ảnh hưởng tài khoản cũ, xem teacherModel.ts).
+    // SỬA (25-10): không bắt buộc xác nhận email (mặc định) thì KHÔNG gửi email
+    // xác nhận nữa — đăng ký xong vào app luôn.
+    const requireEmailVerification = await getRequireEmailVerification();
     const verifyToken = generateVerifyToken();
     // THÊM MỚI (đóng/duyệt đăng ký): registrationMode === 'approval' thì
     // tài khoản tạo ra ở trạng thái 'pending' — chưa đăng nhập được cho tới
@@ -104,10 +106,17 @@ export async function POST(request: NextRequest) {
       email: normalizedEmail,
       passwordHash,
       name: String(name).trim(),
-      freeExpiresAt,
-      emailVerified: false,
-      verifyTokenHash: hashVerifyToken(verifyToken),
-      verifyTokenExpires: new Date(Date.now() + VERIFY_TOKEN_TTL_HOURS * 60 * 60 * 1000),
+      // SỬA (25-10): app MIỄN PHÍ hoàn toàn — không đặt hạn dùng thử (freeExpiresAt
+      // để trống = không bao giờ hết hạn, xem computePlanStatus).
+      // Không bắt buộc xác nhận email thì tài khoản mới coi như đã xác nhận ngay,
+      // không lưu token (chỉ khi admin BẬT yêu cầu mới tạo token + gửi email).
+      emailVerified: !requireEmailVerification,
+      ...(requireEmailVerification
+        ? {
+            verifyTokenHash: hashVerifyToken(verifyToken),
+            verifyTokenExpires: new Date(Date.now() + VERIFY_TOKEN_TTL_HOURS * 60 * 60 * 1000),
+          }
+        : {}),
       ...(registrationMode === 'approval' ? { status: 'pending' } : {}),
     });
 
@@ -115,15 +124,13 @@ export async function POST(request: NextRequest) {
     // mail (cùng nguyên tắc với sendAdminLoginAlertEmail ở route login), và
     // KHÔNG chặn đăng nhập/dùng app dù email chưa xác nhận (xem ghi chú ở
     // teacherModel.ts) — chỉ nhắc xác nhận, không khoá tính năng.
-    const verifyUrl = `${getAppUrl(request.nextUrl.origin)}/verify-email?token=${verifyToken}`;
-    sendVerificationEmail(teacher.email, verifyUrl).catch((err) =>
-      console.error('Lỗi gửi email xác nhận:', err)
-    );
+    if (requireEmailVerification) {
+      const verifyUrl = `${getAppUrl(request.nextUrl.origin)}/verify-email?token=${verifyToken}`;
+      sendVerificationEmail(teacher.email, verifyUrl).catch((err) =>
+        console.error('Lỗi gửi email xác nhận:', err)
+      );
+    }
 
-    // THÊM MỚI (đóng/duyệt đăng ký): tài khoản 'pending' KHÔNG được tự đăng
-    // nhập luôn như trước (không set cookie session) — phải chờ admin duyệt
-    // rồi tự đăng nhập lại sau, tránh vào được app trong lúc account chưa
-    // "hợp lệ" theo quyết định của admin.
     if (registrationMode === 'approval') {
       return NextResponse.json(
         {
@@ -145,7 +152,7 @@ export async function POST(request: NextRequest) {
           id: teacher._id.toString(),
           email: teacher.email,
           name: teacher.name,
-          emailVerified: teacher.emailVerified,
+          emailVerified: teacher.emailVerified || !requireEmailVerification,
         },
       },
       { status: 201 }
