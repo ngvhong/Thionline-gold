@@ -15,6 +15,8 @@ type StudentAccountItem = {
   lastLoginAt: string | null;
   classCount: number;
   submissionCount: number;
+  practiceCount: number; // số đề Ôn luyện đã làm
+  mockCount: number; // số đề Thi thử đã nộp
   deletable: boolean;
   inactive: boolean;
 };
@@ -50,7 +52,7 @@ export default function AdminStudentAccountsSection({ onChanged }: { onChanged?:
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState(''); // search đã "chốt" (debounce)
-  const [filter, setFilter] = useState<'all' | 'inactive'>('inactive');
+  const [filter, setFilter] = useState<'all' | 'inactive' | 'stats'>('inactive');
   const [inactiveDays, setInactiveDays] = useState(30);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -65,7 +67,11 @@ export default function AdminStudentAccountsSection({ onChanged }: { onChanged?:
     setLoading(true);
     setError('');
     try {
-      const params = new URLSearchParams({ filter, inactiveDays: String(inactiveDays) });
+      const params = new URLSearchParams({
+        filter: filter === 'inactive' ? 'inactive' : 'all',
+        inactiveDays: String(inactiveDays),
+      });
+      if (filter === 'stats') params.set('sort', 'exams');
       if (query) params.set('q', query);
       const res = await apiFetch<ListResponse>(`/api/admin/student-accounts?${params.toString()}`);
       setData(res);
@@ -121,45 +127,19 @@ export default function AdminStudentAccountsSection({ onChanged }: { onChanged?:
     }
   }
 
+  // Xóa NGAY, không hỏi xác nhận (theo yêu cầu admin).
   function handleDeleteOne(a: StudentAccountItem) {
-    const extra =
-      a.submissionCount > 0
-        ? `\n\nBài ôn luyện của em (${a.submissionCount} lượt) cũng bị xóa theo.`
-        : '';
-    if (
-      !window.confirm(
-        `Xóa tài khoản học sinh "${a.name}" (${a.phone})?${extra}\n\nKhông thể hoàn tác. Em có thể đăng ký lại bằng số điện thoại này sau.`
-      )
-    ) {
-      return;
-    }
     runDelete({ ids: [a._id] }, () => `Đã xóa tài khoản "${a.name}".`);
   }
 
   function handleDeleteSelected() {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
-    if (
-      !window.confirm(
-        `Xóa ${ids.length} tài khoản học sinh đã chọn? Bài ôn luyện của các em này cũng bị xóa theo. Không thể hoàn tác.`
-      )
-    ) {
-      return;
-    }
     runDelete({ ids }, (d) => `Đã xóa ${d} tài khoản học sinh.`);
   }
 
   function handleDeleteAllInactive() {
     if (!data || data.inactiveCount === 0) return;
-    const n = Math.min(data.inactiveCount, data.bulkLimit);
-    const more = data.inactiveCount > data.bulkLimit ? ` (mỗi lần tối đa ${data.bulkLimit}, còn lại bấm xóa tiếp)` : '';
-    if (
-      !window.confirm(
-        `Xóa ${n} tài khoản học sinh KHÔNG DÙNG${more}?\n\nĐiều kiện: không đăng nhập quá ${inactiveDays} ngày (hoặc chưa từng đăng nhập) VÀ chưa thuộc lớp nào. Bài ôn luyện của các em này cũng bị xóa. Không thể hoàn tác.`
-      )
-    ) {
-      return;
-    }
     runDelete(
       { allInactive: true, inactiveDays },
       (d, remaining) => `Đã xóa ${d} tài khoản không dùng.${remaining > 0 ? ` Còn ${remaining} tài khoản nữa — bấm xóa tiếp.` : ''}`
@@ -175,7 +155,8 @@ export default function AdminStudentAccountsSection({ onChanged }: { onChanged?:
           </h3>
           <p className="text-xs text-gray-500 mt-0.5">
             &quot;Không dùng&quot; = không đăng nhập quá số ngày chọn (hoặc chưa từng đăng nhập) và chưa thuộc lớp nào.
-            Tài khoản đã vào lớp của giáo viên không xóa được ở đây.
+            Tài khoản đã vào lớp của giáo viên không xóa được ở đây. Ôn luyện = số đề đã làm ít nhất 1 câu;
+            Thi thử = số đề đã nộp (HS tự làm, không qua lớp).
           </p>
         </div>
         <button
@@ -196,11 +177,12 @@ export default function AdminStudentAccountsSection({ onChanged }: { onChanged?:
         />
         <select
           value={filter}
-          onChange={(e) => setFilter(e.target.value as 'all' | 'inactive')}
+          onChange={(e) => setFilter(e.target.value as 'all' | 'inactive' | 'stats')}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
         >
           <option value="inactive">Chỉ tài khoản không dùng</option>
           <option value="all">Tất cả tài khoản</option>
+          <option value="stats">Thống kê số đề đã làm (nhiều → ít)</option>
         </select>
         <select
           value={inactiveDays}
@@ -241,7 +223,11 @@ export default function AdminStudentAccountsSection({ onChanged }: { onChanged?:
           <div className="py-8 text-center text-sm text-gray-400">Đang tải...</div>
         ) : accounts.length === 0 ? (
           <div className="py-8 text-center text-sm text-gray-400">
-            {filter === 'inactive' ? 'Không có tài khoản nào thuộc diện không dùng.' : 'Chưa có tài khoản học sinh nào.'}
+            {filter === 'inactive'
+              ? 'Không có tài khoản nào thuộc diện không dùng.'
+              : filter === 'stats'
+              ? 'Chưa có học sinh nào làm đề Ôn luyện / Thi thử.'
+              : 'Chưa có tài khoản học sinh nào.'}
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -260,6 +246,9 @@ export default function AdminStudentAccountsSection({ onChanged }: { onChanged?:
                 <th className="px-4 py-2.5">Ngày đăng ký</th>
                 <th className="px-4 py-2.5">Đăng nhập gần nhất</th>
                 <th className="px-4 py-2.5">Lớp / bài làm</th>
+                <th className="px-4 py-2.5 text-center">Ôn luyện</th>
+                <th className="px-4 py-2.5 text-center">Thi thử</th>
+                <th className="px-4 py-2.5 text-center">Tổng đề</th>
                 <th className="px-4 py-2.5 text-right"></th>
               </tr>
             </thead>
@@ -295,6 +284,11 @@ export default function AdminStudentAccountsSection({ onChanged }: { onChanged?:
                         Đang trong lớp
                       </span>
                     )}
+                  </td>
+                  <td className="px-4 py-2.5 text-center text-gray-700">{a.practiceCount}</td>
+                  <td className="px-4 py-2.5 text-center text-gray-700">{a.mockCount}</td>
+                  <td className="px-4 py-2.5 text-center font-semibold text-gray-800">
+                    {a.practiceCount + a.mockCount}
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     {a.deletable ? (

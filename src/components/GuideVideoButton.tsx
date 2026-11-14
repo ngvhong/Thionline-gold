@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { GUIDE_VIDEOS, type GuideVideoRole } from '@/data/guideVideos';
+import { GUIDE_VIDEOS, TEACHER_VIDEOS, type GuideVideoRole } from '@/data/guideVideos';
+
+// Đã bấm xem video hướng dẫn trên thiết bị này chưa? Lưu ở localStorage.
+// Chưa xem -> icon camera + chữ "Video hướng dẫn" màu cam; xem rồi -> màu xanh như cũ.
+const SEEN_KEY = 'thionline_guide_video_seen';
 
 // Icon video nét mảnh (stroke 1.6, cùng phong cách các icon SVG khác của app).
 export function VideoLineIcon({ className }: { className?: string }) {
@@ -33,7 +37,25 @@ export default function GuideVideoButton({
 }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // Mặc định coi như đã xem (xanh) cho tới khi đọc xong localStorage ở client,
+  // tránh lệch giữa server và client khi render.
+  const [seen, setSeen] = useState(true);
+  useEffect(() => {
+    setMounted(true);
+    try {
+      setSeen(localStorage.getItem(SEEN_KEY) === '1');
+    } catch {
+      setSeen(true);
+    }
+  }, []);
+  const markSeen = () => {
+    setSeen(true);
+    try {
+      localStorage.setItem(SEEN_KEY, '1');
+    } catch {
+      /* trình duyệt chặn localStorage: bỏ qua */
+    }
+  };
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -43,13 +65,21 @@ export default function GuideVideoButton({
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
-  const videos = role === 'both' ? [GUIDE_VIDEOS.teacher, GUIDE_VIDEOS.student] : [GUIDE_VIDEOS[role]];
-  const directUrl = role !== 'both' ? GUIDE_VIDEOS[role].url : '';
+  // Giáo viên có 2 video -> popup 2 lựa chọn; học sinh 1 video -> mở thẳng.
+  const videos =
+    role === 'both'
+      ? [...TEACHER_VIDEOS, GUIDE_VIDEOS.student]
+      : role === 'teacher'
+      ? TEACHER_VIDEOS
+      : [GUIDE_VIDEOS[role]];
+  const directUrl = videos.length === 1 ? videos[0].url : '';
 
+  // Chưa xem: chỉ icon + chữ đổi cam, viền/nền giữ nguyên xanh.
+  const textColor = seen ? 'text-blue-600' : 'text-orange-500';
   const triggerClass =
     variant === 'icon'
-      ? `w-8 h-8 rounded-full border border-blue-400/70 text-blue-600 bg-white hover:bg-blue-50 flex items-center justify-center shrink-0 transition-colors ${className}`
-      : `inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 border border-blue-300 hover:bg-blue-50 rounded-full pl-2.5 pr-3.5 py-1.5 transition-colors ${className}`;
+      ? `w-8 h-8 rounded-full border border-blue-400/70 ${textColor} bg-white hover:bg-blue-50 flex items-center justify-center shrink-0 transition-colors ${className}`
+      : `inline-flex items-center gap-1.5 text-sm font-medium ${textColor} border border-blue-300 hover:bg-blue-50 rounded-full pl-2.5 pr-3.5 py-1.5 transition-colors ${className}`;
   const triggerContent =
     variant === 'icon' ? (
       <VideoLineIcon className="w-5 h-5" />
@@ -68,6 +98,7 @@ export default function GuideVideoButton({
         rel="noopener noreferrer"
         title="Xem video hướng dẫn"
         aria-label="Video hướng dẫn"
+        onClick={markSeen}
         className={triggerClass}
       >
         {triggerContent}
@@ -79,7 +110,10 @@ export default function GuideVideoButton({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          markSeen();
+          setOpen(true);
+        }}
         title="Video hướng dẫn"
         aria-label="Video hướng dẫn"
         className={triggerClass}
@@ -117,7 +151,7 @@ export default function GuideVideoButton({
                 {videos.map((v) =>
                   v.url ? (
                     <a
-                      key={v.role}
+                      key={v.url || v.title}
                       href={v.url}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -131,7 +165,7 @@ export default function GuideVideoButton({
                     </a>
                   ) : (
                     <div
-                      key={v.role}
+                      key={v.url || v.title}
                       className="flex items-center gap-3 border border-dashed border-gray-200 rounded-lg px-3.5 py-3"
                     >
                       <VideoLineIcon className="w-7 h-7 shrink-0 text-gray-300" />

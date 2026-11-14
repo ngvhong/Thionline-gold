@@ -7,6 +7,7 @@ import { ShortLinkModel } from '@/lib/shortLinkModel';
 import { ExamGroupLinkModel } from '@/lib/examGroupLinkModel';
 import { KhoiModel } from '@/lib/khoiModel';
 import { TeacherModel } from '@/lib/teacherModel';
+import { PracticeProgressModel } from '@/lib/practiceProgressModel';
 import { deleteSubmissionBlobs, deleteExamImageBlobs } from '@/lib/blobCleanup';
 
 // DÙNG CHUNG cho 2 nơi xóa tài khoản GV:
@@ -47,6 +48,8 @@ export async function deleteTeacherAndAllData(teacher: { _id: any }): Promise<vo
   await ExamAssignmentModel.deleteMany({
     $or: [{ examId: { $in: examIds } }, { classId: { $in: classIds } }],
   });
+  // Tiến độ Ôn luyện của HS trên các đề của GV này (đề mất thì bản ghi mồ côi).
+  await PracticeProgressModel.deleteMany({ examId: { $in: examIds } });
   await ShortLinkModel.deleteMany({ examId: { $in: examIds } });
   await ExamGroupLinkModel.deleteMany({ ownerId: teacher._id });
   await StudentModel.deleteMany({ classId: { $in: classIds } });

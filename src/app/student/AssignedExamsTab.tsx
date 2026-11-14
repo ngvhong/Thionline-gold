@@ -291,7 +291,7 @@ function AssignedExamRunner({
 // ============================================================
 // ---------- Danh sách đề được giao (nhóm theo lớp) ----------
 // ============================================================
-export default function AssignedExamsTab() {
+export default function AssignedExamsTab({ onWantJoin }: { onWantJoin?: () => void } = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
@@ -347,8 +347,18 @@ export default function AssignedExamsTab() {
 
   if (assignments.length === 0) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-5 text-sm text-gray-500 text-center min-h-[140px] flex items-center justify-center">
-        Chưa có đề nào được giao cho bạn. Hỏi giáo viên xem đã giao đề cho lớp bạn chưa nhé.
+      <div className="bg-white border border-gray-200 rounded-xl p-5 text-sm text-gray-500 text-center min-h-[140px] flex flex-col items-center justify-center gap-3">
+        <p>Chưa có đề nào được giao. Có mã lớp từ giáo viên thì nhập để vào lớp.</p>
+        {onWantJoin && (
+          <button
+            type="button"
+            onClick={onWantJoin}
+            className="text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2"
+          >
+            Nhập mã lớp
+          </button>
+        )}
+        <p className="text-xs text-gray-400">Hoặc sang tab Ôn luyện để tự làm đề.</p>
       </div>
     );
   }

@@ -418,14 +418,9 @@ export default function LibraryPracticeTab({
 
   return (
     <div>
-      {!isLoggedIn && (
-        <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-3">
-          Xem tự do — bấm vào 1 đề để làm thì mới cần đăng nhập/đăng ký.
-        </p>
-      )}
-
-      {/* Breadcrumb */}
-      <div className="flex items-center flex-wrap gap-x-1 gap-y-0 text-sm text-gray-500 mb-2 [&_button]:py-2">
+      {/* Breadcrumb — chỉ hiện khi đã mở vào thư mục (ở gốc không cần, tiêu đề đã có). */}
+      {path.length > 0 && (
+      <div className="flex items-center flex-wrap gap-x-1 gap-y-0 text-sm text-gray-500 mb-1 [&_button]:py-2">
         <button type="button" onClick={() => setPath([])} className="hover:text-blue-600 hover:underline">
           Kho đề
         </button>
@@ -442,17 +437,15 @@ export default function LibraryPracticeTab({
           </span>
         ))}
       </div>
+      )}
 
       {treeLoading && <p className="text-sm text-gray-400">Đang tải...</p>}
       {treeError && <p className="text-sm text-red-600">{treeError}</p>}
 
       {!treeLoading && !treeError && (
         <>
-          {children.length > 0 && !currentParentId && (
-            <p className="text-xs text-gray-500 mb-2">Bấm vào một thư mục để mở và xem các đề bên trong.</p>
-          )}
           {children.length > 0 && (
-            <ul className="space-y-1.5 mb-3">
+            <ul className="space-y-1.5 mb-3 max-h-[52vh] overflow-y-auto overscroll-contain thin-scroll pr-1">
               {children
                 .slice()
                 .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'vi'))
@@ -461,10 +454,10 @@ export default function LibraryPracticeTab({
                     <button
                       type="button"
                       onClick={() => setPath([...path, { id: f._id, name: f.name }])}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-left text-sm font-medium text-gray-700"
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-left text-sm font-medium text-gray-700"
                     >
                       <LibraryFolderIcon className="w-4 h-4 shrink-0 text-gray-400" />
-                      <span className="flex-1">{f.name}</span>
+                      <span className="flex-1 min-w-0">{f.name}</span>
                       {(() => {
                         const total = totalExamCountOf(f._id);
                         return total > 0 ? (
@@ -505,7 +498,7 @@ export default function LibraryPracticeTab({
                     )}
                     {/* Khung cuộn riêng (thanh mảnh) khi có nhiều đề; đề MỚI nhất nằm trên cùng
                         (API đã sắp theo ngày xuất bản giảm dần). */}
-                    <ul className="space-y-1.5 max-h-[60vh] overflow-y-auto thin-scroll pr-1">
+                    <ul className="space-y-1.5 max-h-[55vh] overflow-y-auto overscroll-contain thin-scroll pr-1">
                       {exams
                         .filter((e) => !examQuery.trim() || e.title.toLowerCase().includes(examQuery.trim().toLowerCase()))
                         .map((e) => (

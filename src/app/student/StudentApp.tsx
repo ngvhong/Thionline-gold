@@ -164,10 +164,6 @@ function AuthGate({ onAuthenticated }: { onAuthenticated: (account: Account) => 
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  // Sau khi tạo tài khoản xong (register), nếu người dùng muốn vào lớp
-  // ngay thì hiện thêm bước chọn mã lớp + tên — KHÔNG chặn tạo tài khoản
-  // nếu chưa có mã lớp (có thể "Vào thêm lớp" sau, lúc đã đăng nhập).
-  const [pendingAccount, setPendingAccount] = useState<Account | null>(null);
 
   async function handleLogin(e: FormEvent) {
     e.preventDefault();
@@ -195,44 +191,14 @@ function AuthGate({ onAuthenticated }: { onAuthenticated: (account: Account) => 
         method: 'POST',
         body: JSON.stringify({ name, phone, pin }),
       });
-      // Đăng ký xong đã có cookie phiên — hiện thêm bước "vào lớp" (tùy
-      // chọn) trước khi coi như hoàn tất, để không phải mở lại màn "Vào
-      // thêm lớp" ngay sau khi vừa đăng ký nếu học sinh có sẵn mã lớp.
-      setPendingAccount(account);
+      // Đăng ký xong đã có cookie phiên -> vào thẳng trang chính của học sinh.
+      // Mã lớp (nếu có) nhập ở tab "Đề được giao" hoặc nút "+ Vào thêm lớp".
+      onAuthenticated(account);
     } catch (err: any) {
       setError(err.message || 'Không đăng ký được.');
     } finally {
       setSubmitting(false);
     }
-  }
-
-  async function handleJoinAfterRegister(info: { inviteCode: string; studentId: string }) {
-    if (!pendingAccount) return;
-    try {
-      await apiFetch('/api/student-auth/join-class', {
-        method: 'POST',
-        body: JSON.stringify(info),
-      });
-    } catch (err: any) {
-      // Tài khoản đã tạo thành công dù join lớp lỗi — không chặn, chỉ báo
-      // để học sinh tự "Vào thêm lớp" lại sau lúc đã đăng nhập.
-      alert(err.message || 'Tạo tài khoản thành công nhưng vào lớp chưa được — bạn có thể thử lại ở "Vào thêm lớp".');
-    }
-    onAuthenticated(pendingAccount);
-  }
-
-  if (pendingAccount) {
-    return (
-      <div>
-        <p className="text-sm text-gray-600 mb-4">
-          Đã tạo tài khoản cho <b>{pendingAccount.name}</b>. Nếu có mã lớp, nhập vào đây để vào lớp ngay:
-        </p>
-        <JoinClassForm
-          onJoined={handleJoinAfterRegister}
-          onSkip={() => onAuthenticated(pendingAccount)}
-        />
-      </div>
-    );
   }
 
   return (
@@ -392,7 +358,7 @@ function StudentHome({
       </div>
 
       {tab === 'assigned' ? (
-        <AssignedExamsTab key={assignedReloadKey} />
+        <AssignedExamsTab key={assignedReloadKey} onWantJoin={() => setShowJoinModal(true)} />
       ) : (
         <LibraryPracticeTab
           key={tab}
@@ -460,8 +426,8 @@ function StudentHome({
 function GuestHome({ onRequestAuth, onWantLogin }: { onRequestAuth: (examId: string) => void; onWantLogin: () => void }) {
   return (
     <div className="w-full max-w-md text-left">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-sm font-semibold text-gray-700">Ôn luyện — kho đề tự luyện</p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold text-gray-700">Kho đề ôn luyện</p>
         <button
           type="button"
           onClick={onWantLogin}
@@ -518,7 +484,6 @@ export default function StudentApp() {
             <AppLogoIcon className="w-8 h-8 shrink-0" />
             {APP_NAME}
             <span className="text-xs font-normal text-gray-400">· Cổng học sinh</span>
-            <GuideVideoButton role="student" variant="icon" className="ml-auto" />
           </p>
         ) : (
           <>
@@ -526,8 +491,8 @@ export default function StudentApp() {
               <AppLogoIcon className="w-10 h-10 shrink-0" />
               {APP_NAME}
             </p>
-            <p className="text-sm text-gray-400 mb-3">Cổng học sinh</p>
-            <div className="flex justify-center mb-5">
+            <p className="text-sm text-gray-400 mb-2">Cổng học sinh</p>
+            <div className="flex justify-center mb-4">
               <GuideVideoButton role="student" />
             </div>
           </>
@@ -561,7 +526,7 @@ export default function StudentApp() {
             clearPortalChoice();
             router.push('/login');
           }}
-          className="text-sm font-medium text-black hover:text-blue-700 underline underline-offset-2 mt-5"
+          className="text-sm font-medium text-black hover:text-blue-700 underline underline-offset-2 mt-3"
         >
           Không phải bạn? Đổi vai trò
         </button>

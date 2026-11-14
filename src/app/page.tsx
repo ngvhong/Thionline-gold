@@ -3682,28 +3682,14 @@ function AdminTab() {
   }
 
   // THÊM MỚI: admin XÓA VĨNH VIỄN tài khoản GV + toàn bộ lớp/học sinh/đề/bài
-  // nộp của GV đó (khác "Khoá": không thể mở lại). Bắt gõ lại đúng email để
-  // xác nhận; server cũng kiểm tra lại email này (xem DELETE
-  // /api/admin/teachers/[id]).
+  // nộp của GV đó (khác "Khoá": không thể mở lại). Xóa NGAY, không hỏi xác nhận.
   const [deletingId, setDeletingId] = useState<string | null>(null);
   async function handleDeleteTeacher(t: TeacherAccountItem) {
     setOpenMenuId(null);
-    const input = window.prompt(
-      `XÓA VĨNH VIỄN tài khoản "${t.name}" (${t.email})?\n\n` +
-        `Toàn bộ ${t.classCount} lớp, học sinh trong lớp, đề thi, bài nộp và ảnh bài làm của giáo viên này sẽ bị xóa và KHÔNG THỂ khôi phục. ` +
-        `Nếu chỉ muốn chặn đăng nhập, hãy chọn "Khoá tài khoản".\n\n` +
-        `Để xác nhận, nhập chính xác email của tài khoản:`
-    );
-    if (input === null) return; // bấm Hủy
-    if (input.trim().toLowerCase() !== t.email.trim().toLowerCase()) {
-      alert('Email nhập không khớp — chưa xóa gì cả.');
-      return;
-    }
     setDeletingId(t._id);
     try {
       await apiFetch(`/api/admin/teachers/${t._id}`, {
         method: 'DELETE',
-        body: JSON.stringify({ confirmEmail: input.trim() }),
       });
       setTeachers((prev) => prev.filter((x) => x._id !== t._id));
       if (expandedId === t._id) setExpandedId(null);

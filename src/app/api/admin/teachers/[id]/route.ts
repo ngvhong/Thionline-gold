@@ -178,8 +178,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 // An toàn:
 //  - Chỉ admin (requireAdmin tra lại email thật từ DB theo session).
 //  - Không cho tự xóa chính mình, không cho xóa tài khoản quản trị.
-//  - Body BẮT BUỘC có `confirmEmail` khớp email tài khoản bị xóa — chống bấm
-//    nhầm / gọi API bừa (UI cũng bắt admin gõ lại email trước khi gửi).
+//  - KHÔNG còn bắt xác nhận (gõ lại email) — admin bấm xóa là xóa luôn.
 //  - Ghi nhật ký SAU khi xóa thành công (snapshot email, vì tài khoản đã mất).
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -196,9 +195,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       );
     }
 
-    const body = await request.json().catch(() => ({}));
-    const confirmEmail = typeof body.confirmEmail === 'string' ? body.confirmEmail.trim().toLowerCase() : '';
-
     await connectToDatabase();
     const teacher: any = await TeacherModel.findById(id).lean();
     if (!teacher) {
@@ -206,12 +202,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
     if (teacher.role === 'admin' || isAdminEmail(teacher.email)) {
       return NextResponse.json({ error: 'Không thể xóa tài khoản quản trị.' }, { status: 403 });
-    }
-    if (!confirmEmail || confirmEmail !== String(teacher.email).trim().toLowerCase()) {
-      return NextResponse.json(
-        { error: 'Email xác nhận không khớp — chưa xóa gì cả.' },
-        { status: 400 }
-      );
     }
 
     // Đếm trước để ghi vào nhật ký (sau khi xóa sẽ không đếm lại được).

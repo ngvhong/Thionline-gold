@@ -6,6 +6,7 @@ import { StudentAccountModel } from '@/lib/studentAccountModel';
 import { StudentModel } from '@/lib/studentModel';
 import { SubmissionModel } from '@/lib/submissionModel';
 import { AdminAuditLogModel } from '@/lib/adminAuditLogModel';
+import { PracticeProgressModel } from '@/lib/practiceProgressModel';
 import {
   DAY_MS,
   deleteStudentAccounts,
@@ -50,18 +51,78 @@ export async function GET(request: NextRequest) {
       conds.push({ $or: [{ name: rx }, { phone: rx }] });
     }
     const query = conds.length ? { $and: conds } : {};
+    const sortByExams = sp.get('sort') === 'exams';
 
-    const [total, inactiveCount, accounts] = await Promise.all([
+    // Thống kê đề HS TỰ LÀM (không qua lớp): Ôn luyện = số đề có tiến độ (đã làm >= 1 câu),
+    // Thi thử = số lượt đã nộp ở Kho đề chung (Submission không có studentId).
+    const practiceMatch = { answered: { $gt: 0 } };
+    const mockMatch = { studentId: null, status: 'đã nộp' };
+
+    let accounts: any[];
+    let statPre: { practice: Map<string, number>; mock: Map<string, number> } | null = null;
+    const [total, inactiveCount] = await Promise.all([
       StudentAccountModel.countDocuments(),
       StudentAccountModel.countDocuments(inactiveQuery),
-      StudentAccountModel.find(query)
+    ]);
+
+    if (sortByExams) {
+      // Chế độ thống kê: tính trên TOÀN BỘ tài khoản (áp dụng ô tìm kiếm), xếp theo
+      // tổng số đề đã làm giảm dần, chỉ giữ những em đã làm ít nhất 1 đề.
+      const scope: any[] = await StudentAccountModel.find(query).select('_id').lean();
+      const scopeIds = scope.map((x) => x._id);
+      const [pAgg, mAgg] = scopeIds.length
+        ? await Promise.all([
+            PracticeProgressModel.aggregate([
+              { $match: { studentAccountId: { $in: scopeIds }, ...practiceMatch } },
+              { $group: { _id: '$studentAccountId', n: { $sum: 1 } } },
+            ]),
+            SubmissionModel.aggregate([
+              { $match: { studentAccountId: { $in: scopeIds }, ...mockMatch } },
+              { $group: { _id: '$studentAccountId', n: { $sum: 1 } } },
+            ]),
+          ])
+        : [[], []];
+      const practice = new Map<string, number>((pAgg as any[]).map((x) => [String(x._id), x.n as number]));
+      const mock = new Map<string, number>((mAgg as any[]).map((x) => [String(x._id), x.n as number]));
+      const merged = new Map<string, number>();
+      for (const [k, v] of practice) merged.set(k, (merged.get(k) || 0) + v);
+      for (const [k, v] of mock) merged.set(k, (merged.get(k) || 0) + v);
+      const topIds = Array.from(merged.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, LIST_LIMIT)
+        .map(([k]) => new mongoose.Types.ObjectId(k));
+      const found: any[] = topIds.length
+        ? await StudentAccountModel.find({ _id: { $in: topIds } }).select('name phone created_at lastLoginAt').lean()
+        : [];
+      const order = new Map(topIds.map((id, i) => [String(id), i]));
+      accounts = found.sort((a, b) => (order.get(String(a._id)) ?? 0) - (order.get(String(b._id)) ?? 0));
+      statPre = { practice, mock };
+    } else {
+      accounts = await StudentAccountModel.find(query)
         .select('name phone created_at lastLoginAt')
         .sort({ lastLoginAt: 1, created_at: 1 })
         .limit(LIST_LIMIT)
-        .lean(),
-    ]);
+        .lean();
+    }
 
     const ids = accounts.map((a: any) => a._id);
+    const [pAgg2, mAgg2] =
+      ids.length && !statPre
+        ? await Promise.all([
+            PracticeProgressModel.aggregate([
+              { $match: { studentAccountId: { $in: ids }, ...practiceMatch } },
+              { $group: { _id: '$studentAccountId', n: { $sum: 1 } } },
+            ]),
+            SubmissionModel.aggregate([
+              { $match: { studentAccountId: { $in: ids }, ...mockMatch } },
+              { $group: { _id: '$studentAccountId', n: { $sum: 1 } } },
+            ]),
+          ])
+        : [[], []];
+    const practiceMap =
+      statPre?.practice ?? new Map<string, number>((pAgg2 as any[]).map((x) => [String(x._id), x.n as number]));
+    const mockMap =
+      statPre?.mock ?? new Map<string, number>((mAgg2 as any[]).map((x) => [String(x._id), x.n as number]));
     const [classAgg, subAgg] = ids.length
       ? await Promise.all([
           StudentModel.aggregate([
@@ -100,6 +161,8 @@ export async function GET(request: NextRequest) {
         lastLoginAt: a.lastLoginAt || null,
         classCount,
         submissionCount,
+        practiceCount: practiceMap.get(key) || 0,
+        mockCount: mockMap.get(key) || 0,
         // Có thể xóa được (không gắn lớp) / thuộc diện "không dùng".
         deletable: !inClass,
         inactive: !inClass && stalePassed,
